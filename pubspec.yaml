@@ -1,0 +1,29 @@
+name: repas_seguela
+description: "Commande journalière des repas — DESIMONE CI, site de Séguéla"
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.5.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  firebase_core: ^3.13.0
+  firebase_auth: ^5.5.2
+  cloud_firestore: ^5.6.6
+  excel: ^4.0.6
+  share_plus: ^10.1.4
+  path_provider: ^2.1.5
+  url_launcher: ^6.3.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/seed_octobre_2026.json
