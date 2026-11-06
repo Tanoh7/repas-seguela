@@ -5,7 +5,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 
-const _brand = Color(0xFF0E5A49);
+import 'theme.dart';
+
 
 String authError(Object e) {
   if (e is FirebaseAuthException) {
@@ -39,13 +40,15 @@ class _Header extends StatelessWidget {
   const _Header(this.subtitle);
   @override
   Widget build(BuildContext context) => Container(
-        color: _brand,
         width: double.infinity,
-        padding: EdgeInsets.fromLTRB(20, MediaQuery.of(context).padding.top + 28, 20, 24),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text('Repas Séguéla', style: TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w700)),
-          const SizedBox(height: 4),
-          Text(subtitle, style: const TextStyle(color: Colors.white70)),
+        decoration: const BoxDecoration(color: Colors.white, border: Border(bottom: BorderSide(color: K.red, width: 4))),
+        padding: EdgeInsets.fromLTRB(20, MediaQuery.of(context).padding.top + 28, 20, 22),
+        child: Column(children: [
+          const Brand(size: 78),
+          const SizedBox(height: 18),
+          const Text('Repas Séguéla', style: TextStyle(color: K.ink, fontSize: 24, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 2),
+          Text(subtitle, style: const TextStyle(color: K.muted, fontSize: 15)),
         ]),
       );
 }

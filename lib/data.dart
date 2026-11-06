@@ -76,7 +76,6 @@ List<Dept> defaultDepts() => [
       Dept('hse', 'HSE', 'place'),
       Dept('fuel', 'Fuel', 'place'),
       Dept('invites', 'Invités', 'place'),
-      Dept('stagiaires', 'Stagiaires', 'place'),
       Dept('production', 'Production', 'pit'),
       Dept('topo', 'Topo', 'pit'),
       Dept('fuel-pit', 'Fuel du pit', 'pit'),
@@ -117,15 +116,17 @@ class AppSettings {
 
 class Line {
   String id, name, zone;
-  int? pj, fj, pn, fn; // présence / plats, jour / nuit (plats null = identique à la présence)
-  Line(this.id, this.name, this.zone, {this.pj, this.fj, this.pn, this.fn});
+  // fj / fn : plats jour / nuit commandés. pj / pn : ancienne présence (historique importé).
+  int? pj, fj, pn, fn;
+  bool ok; // département validé pour cette commande
+  Line(this.id, this.name, this.zone, {this.pj, this.fj, this.pn, this.fn, this.ok = false});
   int get foodDay => fj ?? pj ?? 0;
   int get foodNight => fn ?? pn ?? 0;
   bool get isPit => zone == 'pit';
   bool get hasValues => pj != null || fj != null || pn != null || fn != null;
-  Map<String, dynamic> toMap() => {'id': id, 'name': name, 'zone': zone, 'pj': pj, 'fj': fj, 'pn': pn, 'fn': fn};
+  Map<String, dynamic> toMap() => {'id': id, 'name': name, 'zone': zone, 'pj': pj, 'fj': fj, 'pn': pn, 'fn': fn, 'ok': ok};
   factory Line.fromMap(Map m) => Line('${m['id']}', '${m['name']}', m['zone'] == 'pit' ? 'pit' : 'place',
-      pj: _int(m['pj']), fj: _int(m['fj']), pn: _int(m['pn']), fn: _int(m['fn']));
+      pj: _int(m['pj']), fj: _int(m['fj']), pn: _int(m['pn']), fn: _int(m['fn']), ok: m['ok'] == true);
   factory Line.empty(Dept d) => Line(d.id, d.name, d.zone);
 }
 
@@ -151,6 +152,8 @@ class Order {
 
   bool get isSent => status == 'sent';
   bool get isRectified => revisions.isNotEmpty;
+  int get validatedCount => lines.where((l) => l.ok).length;
+  bool get allValidated => lines.isNotEmpty && lines.every((l) => l.ok);
   String get month => date.substring(0, 7);
 
   Totals get totals {
@@ -355,6 +358,44 @@ class Store extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Modifie le nombre de plats (jour ou nuit) d'un département ; il faudra le revalider.
+  void setDish(String id, bool night, int? v) {
+    edit((o) {
+      final l = o.lines.firstWhere((e) => e.id == id);
+      if (night) {
+        l.fn = v;
+        l.pn = null;
+      } else {
+        l.fj = v;
+        l.pj = null;
+      }
+      l.ok = false;
+    });
+  }
+
+  /// Valide un département. Renvoie l'id du prochain département à valider (ou null).
+  String? validate(String id) {
+    String? next;
+    edit((o) {
+      final i = o.lines.indexWhere((e) => e.id == id);
+      if (i < 0) return;
+      final l = o.lines[i];
+      l.fj ??= l.pj ?? 0;
+      l.fn ??= l.pn ?? 0;
+      l.ok = true;
+      final order = [...o.lines.where((e) => !e.isPit), ...o.lines.where((e) => e.isPit)];
+      final k = order.indexWhere((e) => e.id == id);
+      for (var j = 1; j <= order.length; j++) {
+        final c = order[(k + j) % order.length];
+        if (!c.ok) {
+          next = c.id;
+          break;
+        }
+      }
+    });
+    return next;
+  }
+
   /// Reprend les chiffres de la dernière commande avant la date affichée.
   String? copyPrevious() {
     final keys = orders.keys.where((k) => k.compareTo(date) < 0).toList()..sort();
@@ -364,11 +405,12 @@ class Store extends ChangeNotifier {
     edit((o) {
       for (final l in o.lines) {
         final s = m[l.id];
+        l.ok = false;
         if (s != null) {
-          l.pj = s.pj;
-          l.fj = s.fj;
-          l.pn = s.pn;
-          l.fn = s.fn;
+          l.pj = null;
+          l.pn = null;
+          l.fj = s.foodDay;
+          l.fn = s.foodNight;
         }
       }
     });

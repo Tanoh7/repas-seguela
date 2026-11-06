@@ -85,10 +85,12 @@ void _daySheet(xl.Excel x, Order o) {
     final l = o.lines[i], r = first + i;
     final cell = _st(size: 14);
     _put(s, 1, r, l.name.toUpperCase(), _st(size: 14, center: false, bg: l.isPit ? _ochre : null));
-    _put(s, 2, r, l.pj, cell);
-    _put(s, 3, r, (l.pj != null || l.fj != null) ? l.foodDay : null, cell);
-    _put(s, 5, r, l.pn, cell);
-    _put(s, 6, r, (l.pn != null || l.fn != null) ? l.foodNight : null, cell);
+    // La commande fait office de présence : PRESENCE = plats commandés.
+    final hasDay = l.fj != null || l.pj != null, hasNight = l.fn != null || l.pn != null;
+    _put(s, 2, r, hasDay ? l.foodDay : null, cell);
+    _put(s, 3, r, hasDay ? l.foodDay : null, cell);
+    _put(s, 5, r, hasNight ? l.foodNight : null, cell);
+    _put(s, 6, r, hasNight ? l.foodNight : null, cell);
     s.setRowHeight(r, 20);
   }
   _merge(s, 0, first, 0, last, parseIso(o.date), _st(bold: true, size: 12, bg: _blue));
@@ -155,47 +157,46 @@ void _recapSheet(xl.Sheet s, String month, Map<String, Order> byDate, int price)
 /// Cumul par département (imputation des coûts).
 void _deptSheet(xl.Excel x, String month, List<Order> list, int price) {
   final s = x['PAR DÉPARTEMENT'];
-  _widths(s, [24, 16, 14, 12, 14, 12, 13, 18]);
-  _title(s, 7, 'CUMUL PAR DÉPARTEMENT — ${monthLabel(month)}');
-  _header(s, 2, ['DÉPARTEMENT', 'ZONE', 'PRÉSENCE JOUR (cumul)', 'PLATS JOUR', 'PRÉSENCE NUIT (cumul)', 'PLATS NUIT', 'TOTAL PLATS', 'MONTANT (FCFA)']);
-  final agg = <String, List<dynamic>>{}; // id -> [name, zone, pj, fj, pn, fn]
+  _widths(s, [24, 16, 13, 13, 14, 20]);
+  _title(s, 5, 'CUMUL PAR DÉPARTEMENT — ${monthLabel(month)}');
+  _header(s, 2, ['DÉPARTEMENT', 'ZONE', 'PLATS JOUR', 'PLATS NUIT', 'TOTAL PLATS', 'MONTANT (FCFA)']);
+  final agg = <String, List<dynamic>>{}; // id -> [nom, zone, jour, nuit]
   for (final o in list) {
     for (final l in o.lines) {
-      final a = agg.putIfAbsent(l.id, () => [l.name, l.zone, 0, 0, 0, 0]);
+      final a = agg.putIfAbsent(l.id, () => [l.name, l.zone, 0, 0]);
       a[0] = l.name;
       a[1] = l.zone;
-      a[2] += l.pj ?? 0;
-      a[3] += l.foodDay;
-      a[4] += l.pn ?? 0;
-      a[5] += l.foodNight;
+      a[2] += l.foodDay;
+      a[3] += l.foodNight;
     }
   }
-  final ids = agg.keys.toList()..sort((a, b) => (agg[a]![1] == 'pit' ? 1 : 0).compareTo(agg[b]![1] == 'pit' ? 1 : 0));
+  final ids = agg.keys.where((id) => (agg[id]![2] as int) + (agg[id]![3] as int) > 0).toList()
+    ..sort((a, b) => (agg[a]![1] == 'pit' ? 1 : 0).compareTo(agg[b]![1] == 'pit' ? 1 : 0));
   var r = 3;
-  final sum = List<int>.filled(6, 0);
+  final sum = List<int>.filled(4, 0);
   for (final id in ids) {
     final a = agg[id]!;
     final pit = a[1] == 'pit';
-    final total = (a[3] as int) + (a[5] as int);
-    final vals = [a[2] as int, a[3] as int, a[4] as int, a[5] as int, total, total * price];
-    for (var i = 0; i < 6; i++) {
+    final total = (a[2] as int) + (a[3] as int);
+    final vals = [a[2] as int, a[3] as int, total, total * price];
+    for (var i = 0; i < 4; i++) {
       sum[i] += vals[i];
     }
     _put(s, 0, r, '${a[0]}'.toUpperCase(), _st(size: 11, center: false));
     _put(s, 1, r, pit ? 'Au pit (bols)' : 'Sur place', _st(size: 11, center: false, bg: pit ? _ochre : null));
-    for (var i = 0; i < 5; i++) {
-      _put(s, i + 2, r, vals[i], _st(size: 11, bold: i == 4));
+    for (var i = 0; i < 3; i++) {
+      _put(s, i + 2, r, vals[i], _st(size: 11, bold: i == 2));
     }
-    _put(s, 7, r, fmt(vals[5]), _st(size: 11));
+    _put(s, 5, r, fmt(vals[3]), _st(size: 11));
     r++;
   }
   final tot = _st(bold: true, bg: _blue);
   _put(s, 0, r, 'TOTAL', _st(bold: true, bg: _blue, center: false));
   _put(s, 1, r, '', tot);
-  for (var i = 0; i < 5; i++) {
+  for (var i = 0; i < 3; i++) {
     _put(s, i + 2, r, sum[i], tot);
   }
-  _put(s, 7, r, '${fmt(sum[5])} FCFA', _st(bold: true, bg: _red));
+  _put(s, 5, r, '${fmt(sum[3])} FCFA', _st(bold: true, bg: _red));
 }
 
 /// Historique de tous les mois enregistrés.

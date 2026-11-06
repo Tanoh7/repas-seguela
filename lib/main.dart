@@ -8,16 +8,17 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'auth.dart';
 import 'data.dart';
+import 'feedback.dart';
+import 'theme.dart';
 import 'firebase_options.dart';
 import 'home.dart';
 
-const brand = Color(0xFF0E5A49);
-const ochre = Color(0xFFB7791A);
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: firebaseOptions);
   FirebaseFirestore.instance.settings = const Settings(persistenceEnabled: true, cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED);
+  await Fx.init().timeout(const Duration(seconds: 4), onTimeout: () {});
   runApp(const RepasApp());
 }
 
@@ -26,22 +27,13 @@ class RepasApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = ColorScheme.fromSeed(seedColor: brand, primary: brand, secondary: ochre);
     return MaterialApp(
       title: 'Repas Séguéla',
       debugShowCheckedModeBanner: false,
       locale: const Locale('fr', 'FR'),
       supportedLocales: const [Locale('fr', 'FR')],
       localizationsDelegates: const [GlobalMaterialLocalizations.delegate, GlobalWidgetsLocalizations.delegate, GlobalCupertinoLocalizations.delegate],
-      theme: ThemeData(
-        colorScheme: scheme,
-        useMaterial3: true,
-        scaffoldBackgroundColor: const Color(0xFFEEF2EF),
-        appBarTheme: const AppBarTheme(backgroundColor: brand, foregroundColor: Colors.white),
-        inputDecorationTheme: const InputDecorationTheme(border: OutlineInputBorder(), isDense: true, filled: true, fillColor: Colors.white),
-        filledButtonTheme: FilledButtonThemeData(style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48))),
-        outlinedButtonTheme: OutlinedButtonThemeData(style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48))),
-      ),
+      theme: appTheme(),
       home: const AuthGate(),
     );
   }
@@ -139,14 +131,16 @@ class _Splash extends StatelessWidget {
   const _Splash();
   @override
   Widget build(BuildContext context) => const Scaffold(
-        backgroundColor: brand,
+        backgroundColor: Colors.white,
         body: Center(
           child: Column(mainAxisSize: MainAxisSize.min, children: [
-            Text('Repas Séguéla', style: TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w700)),
-            SizedBox(height: 6),
-            Text('DESIMONE CI · Commande journalière', style: TextStyle(color: Colors.white70)),
+            Brand(size: 96),
+            SizedBox(height: 28),
+            Text('Repas Séguéla', style: TextStyle(color: K.ink, fontSize: 22, fontWeight: FontWeight.w800)),
+            SizedBox(height: 4),
+            Text('Commande journalière des repas', style: TextStyle(color: K.muted)),
             SizedBox(height: 24),
-            CircularProgressIndicator(color: Colors.white),
+            CircularProgressIndicator(color: K.red),
           ]),
         ),
       );

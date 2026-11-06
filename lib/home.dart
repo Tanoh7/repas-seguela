@@ -11,49 +11,66 @@ import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'data.dart';
+import 'feedback.dart';
 import 'messages.dart';
 import 'report.dart';
-
-const cBrand = Color(0xFF0E5A49);
-const cBrandSoft = Color(0xFFD7EBE4);
-const cOchre = Color(0xFFB7791A);
-const cOchreSoft = Color(0xFFF7E9CD);
-const cOk = Color(0xFF1C7A49);
-const cOkSoft = Color(0xFFD9F0E2);
-const cWarn = Color(0xFFA35A08);
-const cWarnSoft = Color(0xFFFBE8D0);
-const cBad = Color(0xFFB42318);
-const cBadSoft = Color(0xFFFBE0DD);
-const cMuted = Color(0xFF5A6A64);
-const cLine = Color(0xFFD3DCD7);
-const cWa = Color(0xFF1FA855);
+import 'theme.dart';
 
 void snack(BuildContext context, String text) {
   ScaffoldMessenger.of(context)
     ..hideCurrentSnackBar()
-    ..showSnackBar(SnackBar(content: Text(text), behavior: SnackBarBehavior.floating));
+    ..showSnackBar(SnackBar(content: Text(text)));
 }
 
-Widget notice(String text, {Color bg = cWarnSoft, Color fg = cWarn, Widget? action}) => Container(
+Widget notice(String text, {Color bg = K.warnSoft, Color fg = K.warn, IconData icon = Icons.info_outline, Widget? action}) => Container(
       width: double.infinity,
       padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(8)),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(text, style: TextStyle(color: fg, fontSize: 14)),
-        if (action != null) action,
+      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(12)),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Icon(icon, color: fg, size: 20),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(text, style: TextStyle(color: fg, fontSize: 14, height: 1.3)),
+            if (action != null) action,
+          ]),
+        ),
       ]),
     );
 
 Widget pill(String text, Color bg, Color fg) => Container(
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(99)),
-      child: Text(text.toUpperCase(), style: TextStyle(color: fg, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: .5)),
+      child: Text(text.toUpperCase(), style: TextStyle(color: fg, fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: .5)),
     );
 
 Widget statusPill(Order? o) {
-  if (o == null) return pill('Aucune', const Color(0xFFE3E9E5), cMuted);
-  if (o.isSent) return o.isRectified ? pill('Rectifiée', cOchreSoft, cOchre) : pill('Envoyée', cOkSoft, cOk);
-  return o.isRectified ? pill('Rectif. en cours', cOchreSoft, cOchre) : pill('Brouillon', cWarnSoft, cWarn);
+  if (o == null) return pill('Aucune', K.sunk, K.muted);
+  if (o.isSent) return o.isRectified ? pill('Rectifiée', K.amberSoft, K.amber) : pill('Envoyée', K.greenSoft, K.green);
+  return o.isRectified ? pill('Rectif. en cours', K.amberSoft, K.amber) : pill('Brouillon', K.warnSoft, K.warn);
+}
+
+/// Pastille « OK » verte des départements validés.
+class OkBadge extends StatelessWidget {
+  final bool ok;
+  final int index;
+  const OkBadge({super.key, required this.ok, required this.index});
+  @override
+  Widget build(BuildContext context) => AnimatedContainer(
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOutBack,
+        width: 44,
+        height: 30,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: ok ? K.greenBright : Colors.white,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: ok ? K.greenBright : K.line, width: 1.5),
+        ),
+        child: ok
+            ? const Text('OK', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 14, letterSpacing: .5))
+            : Text('$index', style: const TextStyle(color: K.muted, fontWeight: FontWeight.w700)),
+      );
 }
 
 class SectionCard extends StatelessWidget {
@@ -63,7 +80,7 @@ class SectionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Container(
         padding: padding,
-        decoration: BoxDecoration(color: Colors.white, border: Border.all(color: cLine), borderRadius: BorderRadius.circular(10)),
+        decoration: BoxDecoration(color: Colors.white, border: Border.all(color: K.line), borderRadius: BorderRadius.circular(14)),
         child: child,
       );
 }
@@ -104,18 +121,22 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   void go(int i) {
     widget.store.flush();
+    if (i != tab) HapticFeedback.selectionClick();
     setState(() => tab = i);
   }
 
   Widget deadlineChip(Store s) {
     String text;
-    Color bg = Colors.white24, fg = Colors.white;
+    Color bg = K.sunk, fg = K.ink;
+    IconData icon = Icons.schedule;
     if (s.cur.isSent) {
       text = 'Envoyée ${hm(s.cur.sentAt)}'.trim();
-      bg = Colors.white;
-      fg = cBrand;
+      bg = K.greenSoft;
+      fg = K.green;
+      icon = Icons.check_circle;
     } else if (s.date != todayIso()) {
       text = dmy(s.date);
+      icon = Icons.event;
     } else {
       final p = s.settings.deadline.split(':');
       final now = DateTime.now();
@@ -123,17 +144,27 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       final m = (lim.difference(now).inSeconds / 60).round();
       String d(int x) => x >= 60 ? '${x ~/ 60} h ${two(x % 60)}' : '$x min';
       if (m >= 0) {
-        text = 'Limite ${s.settings.deadline} · ${d(m)}';
+        text = '${s.settings.deadline} · ${d(m)}';
+        if (m <= 30) {
+          bg = K.redSoft;
+          fg = K.red;
+        }
       } else {
-        text = 'Retard · ${d(-m)}';
-        bg = cBad;
+        text = 'Retard ${d(-m)}';
+        bg = K.red;
+        fg = Colors.white;
+        icon = Icons.warning_amber_rounded;
       }
     }
     return Container(
       margin: const EdgeInsets.only(right: 12),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(99)),
-      child: Text(text, style: TextStyle(color: fg, fontWeight: FontWeight.w700, fontSize: 13)),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Icon(icon, size: 16, color: fg),
+        const SizedBox(width: 5),
+        Text(text, style: TextStyle(color: fg, fontWeight: FontWeight.w800, fontSize: 13)),
+      ]),
     );
   }
 
@@ -144,19 +175,24 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       listenable: s,
       builder: (context, _) => Scaffold(
         appBar: AppBar(
-          titleSpacing: 16,
-          title: const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('Repas Séguéla', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 20)),
-            Text('DESIMONE CI · SÉGUÉLA', style: TextStyle(fontSize: 11, color: Colors.white70, letterSpacing: .8)),
+          titleSpacing: 12,
+          shape: const Border(bottom: BorderSide(color: K.red, width: 3)),
+          title: Row(children: [
+            Image.asset('assets/logo_mark.png', width: 34, height: 34, filterQuality: FilterQuality.high),
+            const SizedBox(width: 10),
+            const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('Repas Séguéla', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 19, color: K.ink)),
+              Text('DE SIMONE C.I. · SÉGUÉLA', style: TextStyle(fontSize: 10.5, color: K.muted, letterSpacing: .8, fontWeight: FontWeight.w600)),
+            ]),
           ]),
           actions: [Center(child: deadlineChip(s))],
         ),
         body: Column(children: [
-          if (s.error != null) Padding(padding: const EdgeInsets.fromLTRB(16, 10, 16, 0), child: notice(s.error!, bg: cBadSoft, fg: cBad)),
+          if (s.error != null) Padding(padding: const EdgeInsets.fromLTRB(16, 10, 16, 0), child: notice(s.error!, bg: K.redSoft, fg: K.red, icon: Icons.error_outline)),
           if (s.pendingSync)
             Padding(
                 padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-                child: notice('Hors connexion : les modifications sont gardées sur le téléphone et seront envoyées dès que le réseau revient.')),
+                child: notice('Hors connexion : tout est gardé sur le téléphone et sera envoyé dès que le réseau revient.', icon: Icons.cloud_off)),
           Expanded(
             child: IndexedStack(index: tab, children: [
               CommandeTab(store: s, onSend: () => go(1)),
@@ -173,9 +209,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         bottomNavigationBar: NavigationBar(
           selectedIndex: tab,
           onDestinationSelected: go,
-          height: 64,
+          height: 66,
           destinations: const [
-            NavigationDestination(icon: Icon(Icons.edit_note_outlined), selectedIcon: Icon(Icons.edit_note), label: 'Commande'),
+            NavigationDestination(icon: Icon(Icons.restaurant_menu_outlined), selectedIcon: Icon(Icons.restaurant_menu), label: 'Commande'),
             NavigationDestination(icon: Icon(Icons.send_outlined), selectedIcon: Icon(Icons.send), label: 'Envoi'),
             NavigationDestination(icon: Icon(Icons.calendar_month_outlined), selectedIcon: Icon(Icons.calendar_month), label: 'Historique'),
             NavigationDestination(icon: Icon(Icons.description_outlined), selectedIcon: Icon(Icons.description), label: 'Rapport'),
@@ -199,7 +235,18 @@ class CommandeTab extends StatefulWidget {
 }
 
 class _CommandeTabState extends State<CommandeTab> {
-  String shift = 'jour';
+  String? openId; // département ouvert
+  bool placeOpen = true, pitOpen = true;
+  final Map<String, GlobalKey> keys = {};
+  String? lastDate;
+
+  GlobalKey keyOf(String id) => keys.putIfAbsent(id, () => GlobalKey());
+
+  Order? previousOrder() {
+    final s = widget.store;
+    final k = s.orders.keys.where((x) => x.compareTo(s.date) < 0).toList()..sort();
+    return k.isEmpty ? null : s.orders[k.last];
+  }
 
   Future<void> pickDate() async {
     final s = widget.store;
@@ -209,7 +256,10 @@ class _CommandeTabState extends State<CommandeTab> {
       firstDate: DateTime(2025, 1, 1),
       lastDate: DateTime.now().add(const Duration(days: 60)),
     );
-    if (d != null) s.goDate(isoOf(d));
+    if (d != null) {
+      HapticFeedback.selectionClick();
+      s.goDate(isoOf(d));
+    }
   }
 
   Future<void> copyPrev() async {
@@ -218,11 +268,11 @@ class _CommandeTabState extends State<CommandeTab> {
       final ok = await showDialog<bool>(
         context: context,
         builder: (c) => AlertDialog(
-          title: const Text('Remplacer les chiffres ?'),
-          content: const Text('Les chiffres déjà saisis seront remplacés par ceux de la dernière commande.'),
+          title: const Text('Reprendre la veille ?'),
+          content: const Text('Les nombres déjà saisis seront remplacés par ceux de la dernière commande. Chaque département devra être revalidé.'),
           actions: [
             TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Annuler')),
-            FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Remplacer')),
+            FilledButton(style: FilledButton.styleFrom(minimumSize: const Size(0, 44)), onPressed: () => Navigator.pop(c, true), child: const Text('Remplacer')),
           ],
         ),
       );
@@ -230,80 +280,107 @@ class _CommandeTabState extends State<CommandeTab> {
     }
     final d = s.copyPrevious();
     if (!mounted) return;
-    snack(context, d == null ? 'Aucune commande précédente à reprendre.' : 'Chiffres repris du ${dmy(d)}. Vérifiez-les.');
+    if (d == null) {
+      Fx.error();
+      snack(context, 'Aucune commande précédente à reprendre.');
+    } else {
+      Fx.tick();
+      final first = [...s.cur.lines.where((l) => !l.isPit), ...s.cur.lines.where((l) => l.isPit)];
+      setState(() => openId = first.isEmpty ? null : first.first.id);
+      snack(context, 'Nombres repris du ${dmy(d)}. Vérifiez et validez chaque département.');
+    }
   }
 
-  Widget zone(Store s, bool pit, String title) {
-    final pk = shift == 'jour' ? 'pj' : 'pn';
+  void validate(Line l) {
+    final s = widget.store;
+    final next = s.validate(l.id);
+    Fx.ok();
+    setState(() => openId = next);
+    if (next != null) {
+      final nl = s.cur.lines.firstWhere((e) => e.id == next);
+      setState(() {
+        if (nl.isPit) {
+          pitOpen = true;
+        } else {
+          placeOpen = true;
+        }
+      });
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final ctx = keys[next]?.currentContext;
+        if (ctx != null) Scrollable.ensureVisible(ctx, duration: const Duration(milliseconds: 300), alignment: 0.15, curve: Curves.easeOut);
+      });
+    } else if (s.cur.allValidated) {
+      Timer(const Duration(milliseconds: 250), () {
+        if (mounted) snack(context, 'Tous les départements sont validés. Vous pouvez préparer les messages.');
+      });
+    }
+  }
+
+  Widget section(Store s, bool pit) {
     final rows = s.cur.lines.where((l) => l.isPit == pit).toList();
-    final sum = rows.fold<int>(0, (a, l) => a + (shift == 'jour' ? l.foodDay : l.foodNight));
-    final locked = s.locked;
+    final ok = rows.where((l) => l.ok).length;
+    final day = rows.fold<int>(0, (a, l) => a + l.foodDay), night = rows.fold<int>(0, (a, l) => a + l.foodNight);
+    final open = pit ? pitOpen : placeOpen;
+    final accent = pit ? K.amber : K.anthracite;
+    final prev = previousOrder();
+    final prevMap = prev == null ? <String, Line>{} : {for (final l in prev.lines) l.id: l};
+    var idx = pit ? s.cur.lines.where((l) => !l.isPit).length : 0;
     return Container(
-      decoration: BoxDecoration(color: Colors.white, border: Border.all(color: cLine), borderRadius: BorderRadius.circular(10)),
+      decoration: BoxDecoration(color: Colors.white, border: Border.all(color: K.line), borderRadius: BorderRadius.circular(14)),
       clipBehavior: Clip.antiAlias,
       child: Column(children: [
-        Container(
-          color: pit ? cOchreSoft : cBrandSoft,
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          child: Row(children: [
-            Expanded(child: Text(title, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700))),
-            Text(fmt(sum), style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
-          ]),
-        ),
-        const Padding(
-          padding: EdgeInsets.fromLTRB(12, 8, 12, 2),
-          child: Row(children: [
-            Expanded(child: Text('DÉPARTEMENT', style: TextStyle(fontSize: 11, color: cMuted, fontWeight: FontWeight.w700))),
-            SizedBox(width: 80, child: Text('PRÉSENCE', textAlign: TextAlign.center, style: TextStyle(fontSize: 11, color: cMuted, fontWeight: FontWeight.w700))),
-            SizedBox(width: 8),
-            SizedBox(width: 80, child: Text('PLATS', textAlign: TextAlign.center, style: TextStyle(fontSize: 11, color: cMuted, fontWeight: FontWeight.w700))),
-          ]),
-        ),
-        for (final l in rows)
-          Container(
-            decoration: const BoxDecoration(border: Border(top: BorderSide(color: cLine))),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        InkWell(
+          onTap: () {
+            HapticFeedback.selectionClick();
+            setState(() {
+              if (pit) {
+                pitOpen = !pitOpen;
+              } else {
+                placeOpen = !placeOpen;
+              }
+            });
+          },
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
+            decoration: BoxDecoration(border: Border(left: BorderSide(color: accent, width: 5))),
             child: Row(children: [
-              Expanded(child: _DeptName(line: l, night: shift != 'jour')),
-              SizedBox(
-                width: 80,
-                child: NumField(
-                  key: ValueKey('${s.rev}|${s.date}|$shift|${l.id}|p'),
-                  initial: shift == 'jour' ? l.pj : l.pn,
-                  hint: '0',
-                  enabled: !locked,
-                  label: 'Présence ${l.name}',
-                  onChanged: (v) => s.edit((o) {
-                    final x = o.lines.firstWhere((e) => e.id == l.id);
-                    if (pk == 'pj') {
-                      x.pj = v;
-                    } else {
-                      x.pn = v;
-                    }
-                  }),
-                ),
+              Icon(pit ? Icons.ramen_dining : Icons.restaurant, color: accent),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(pit ? 'Au pit · plats en bol' : 'Sur place', style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+                  Text('$ok / ${rows.length} validés  ·  Jour $day  ·  Nuit $night', style: const TextStyle(color: K.muted, fontSize: 13)),
+                ]),
               ),
-              const SizedBox(width: 8),
-              SizedBox(
-                width: 80,
-                child: NumField(
-                  key: ValueKey('${s.rev}|${s.date}|$shift|${l.id}|f'),
-                  initial: shift == 'jour' ? l.fj : l.fn,
-                  hint: '${(shift == 'jour' ? l.pj : l.pn) ?? 0}',
-                  enabled: !locked,
-                  label: 'Plats ${l.name}',
-                  onChanged: (v) => s.edit((o) {
-                    final x = o.lines.firstWhere((e) => e.id == l.id);
-                    if (shift == 'jour') {
-                      x.fj = v;
-                    } else {
-                      x.fn = v;
-                    }
-                  }),
-                ),
-              ),
+              if (ok == rows.length && rows.isNotEmpty) const Icon(Icons.check_circle, color: K.greenBright),
+              Icon(open ? Icons.expand_less : Icons.expand_more, color: K.muted, size: 28),
             ]),
           ),
+        ),
+        AnimatedSize(
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOut,
+          child: !open
+              ? const SizedBox(width: double.infinity)
+              : Column(children: [
+                  for (final l in rows)
+                    DeptTile(
+                      key: keyOf(l.id),
+                      store: s,
+                      line: l,
+                      index: ++idx,
+                      open: openId == l.id && !s.locked,
+                      previous: prevMap[l.id],
+                      onTap: s.locked
+                          ? null
+                          : () {
+                              HapticFeedback.selectionClick();
+                              setState(() => openId = openId == l.id ? null : l.id);
+                            },
+                      onValidate: () => validate(l),
+                    ),
+                ]),
+        ),
       ]),
     );
   }
@@ -311,144 +388,336 @@ class _CommandeTabState extends State<CommandeTab> {
   @override
   Widget build(BuildContext context) {
     final s = widget.store;
+    if (lastDate != s.date) {
+      lastDate = s.date;
+      openId = null;
+    }
     final o = s.cur, t = o.totals;
+    final n = o.lines.length, v = o.validatedCount;
     Widget status;
     if (o.isSent) {
-      status = pill('Envoyée${o.sentAt != null ? ' · ${hm(o.sentAt)}' : ''}', cOkSoft, cOk);
+      status = pill('Envoyée${o.sentAt != null ? ' · ${hm(o.sentAt)}' : ''}', K.greenSoft, K.green);
     } else if (s.exists || s.dirty) {
-      status = o.isRectified ? pill('Rectification en cours', cOchreSoft, cOchre) : pill('Brouillon enregistré', cWarnSoft, cWarn);
+      status = o.isRectified ? pill('Rectification', K.amberSoft, K.amber) : pill('Brouillon', K.warnSoft, K.warn);
     } else {
-      status = pill('Nouvelle commande', const Color(0xFFE3E9E5), cMuted);
+      status = pill('Nouvelle', K.sunk, K.muted);
     }
+    final remaining = n - v;
     return Column(children: [
       Expanded(
-        child: ListView(padding: const EdgeInsets.fromLTRB(16, 14, 16, 20), children: [
+        child: ListView(padding: const EdgeInsets.fromLTRB(14, 14, 14, 20), children: [
+          // Date
           Row(children: [
-            IconButton.outlined(onPressed: () => s.goDate(addDays(s.date, -1)), icon: const Icon(Icons.chevron_left), tooltip: 'Jour précédent'),
+            _RoundBtn(icon: Icons.chevron_left, onTap: () => s.goDate(addDays(s.date, -1)), tooltip: 'Jour précédent'),
             const SizedBox(width: 8),
             Expanded(
-              child: OutlinedButton.icon(
-                onPressed: pickDate,
-                icon: const Icon(Icons.event),
-                label: Text('${s.date == todayIso() ? "Aujourd'hui · " : ''}${dmy(s.date)}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+              child: Material(
+                color: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: const BorderSide(color: K.line)),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(12),
+                  onTap: pickDate,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    child: Column(children: [
+                      Text(s.date == todayIso() ? "AUJOURD'HUI" : 'COMMANDE DU', style: const TextStyle(fontSize: 11, color: K.muted, fontWeight: FontWeight.w800, letterSpacing: .8)),
+                      Text(dmy(s.date), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+                    ]),
+                  ),
+                ),
               ),
             ),
             const SizedBox(width: 8),
-            IconButton.outlined(onPressed: () => s.goDate(addDays(s.date, 1)), icon: const Icon(Icons.chevron_right), tooltip: 'Jour suivant'),
+            _RoundBtn(icon: Icons.chevron_right, onTap: () => s.goDate(addDays(s.date, 1)), tooltip: 'Jour suivant'),
           ]),
           const SizedBox(height: 12),
-          Wrap(alignment: WrapAlignment.spaceBetween, crossAxisAlignment: WrapCrossAlignment.center, runSpacing: 8, spacing: 8, children: [
-            status,
-            if (!s.locked) TextButton.icon(onPressed: copyPrev, icon: const Icon(Icons.content_copy, size: 18), label: const Text('Reprendre la veille')),
-          ]),
-          if (s.locked) ...[
-            const SizedBox(height: 10),
-            notice('Commande envoyée${o.author.isNotEmpty ? ' par ${o.author}' : ''}. Pour la corriger, utilisez « Rectifier » dans l\'onglet Envoi.', bg: cOkSoft, fg: cOk),
-          ],
-          const SizedBox(height: 12),
-          SegmentedButton<String>(
-            segments: const [
-              ButtonSegment(value: 'jour', label: Text('Jour'), icon: Icon(Icons.wb_sunny_outlined)),
-              ButtonSegment(value: 'nuit', label: Text('Nuit'), icon: Icon(Icons.nightlight_outlined)),
-            ],
-            selected: {shift},
-            onSelectionChanged: (v) => setState(() => shift = v.first),
+          // Progression
+          SectionCard(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              Row(children: [
+                Expanded(
+                    child: Text(o.isSent ? 'Commande envoyée' : 'Validation : $v / $n départements',
+                        style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15))),
+                status,
+              ]),
+              const SizedBox(height: 10),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(99),
+                child: LinearProgressIndicator(
+                  value: o.isSent ? 1 : (n == 0 ? 0 : v / n),
+                  minHeight: 10,
+                  backgroundColor: K.sunk,
+                  color: K.greenBright,
+                ),
+              ),
+              if (!s.locked) ...[
+                const SizedBox(height: 6),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    style: TextButton.styleFrom(foregroundColor: K.red, padding: EdgeInsets.zero),
+                    onPressed: copyPrev,
+                    icon: const Icon(Icons.history, size: 20),
+                    label: const Text('Reprendre les nombres de la veille', style: TextStyle(fontWeight: FontWeight.w700)),
+                  ),
+                ),
+              ],
+              if (s.locked)
+                Padding(
+                  padding: const EdgeInsets.only(top: 10),
+                  child: Text('Envoyée${o.author.isNotEmpty ? ' par ${o.author}' : ''}. Pour corriger : onglet Envoi › Rectifier.',
+                      style: const TextStyle(color: K.muted, fontSize: 13)),
+                ),
+            ]),
           ),
-          const SizedBox(height: 10),
-          const Text('Saisissez la présence. Le nombre de plats reprend la présence ; corrigez-le seulement s\'il est différent.',
-              style: TextStyle(color: cMuted, fontSize: 13)),
           const SizedBox(height: 12),
-          zone(s, false, shift == 'jour' ? 'Sur place' : 'Nuit · sur place'),
+          section(s, false),
           const SizedBox(height: 12),
-          zone(s, true, shift == 'jour' ? 'Au pit · plats en bol' : 'Nuit · au pit'),
-          const SizedBox(height: 14),
-          Text('Commande faite par : ${o.isSent ? o.author : s.profile.name}', style: const TextStyle(color: cMuted)),
+          section(s, true),
           const SizedBox(height: 12),
-          FilledButton.icon(onPressed: widget.onSend, icon: const Icon(Icons.send), label: const Text('Préparer les messages')),
+          Text('Commande faite par : ${o.isSent ? o.author : s.profile.name}', style: const TextStyle(color: K.muted)),
         ]),
       ),
+      // Totaux + action
       Container(
-        decoration: const BoxDecoration(color: Colors.white, border: Border(top: BorderSide(color: cLine))),
-        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
-        child: Row(children: [
-          _Total('Sur place', t.place),
-          _Total('Bols pit', t.pit),
-          _Total('Total jour', t.day, key_: true),
-          _Total('Nuit', t.night, key_: true),
+        decoration: const BoxDecoration(color: Colors.white, border: Border(top: BorderSide(color: K.line))),
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
+        child: Column(children: [
+          Row(children: [
+            _Total('Sur place', t.place),
+            _Total('Bols pit', t.pit),
+            _Total('Total jour', t.day, strong: true),
+            _Total('Nuit', t.night, strong: true),
+          ]),
+          const SizedBox(height: 8),
+          FilledButton.icon(
+            style: FilledButton.styleFrom(backgroundColor: (o.allValidated || o.isSent) ? K.red : K.muted),
+            onPressed: () {
+              if (o.allValidated || o.isSent) {
+                HapticFeedback.lightImpact();
+                widget.onSend();
+              } else {
+                Fx.error();
+                snack(context, 'Validez encore $remaining département(s) avant de préparer les messages.');
+              }
+            },
+            icon: Icon((o.allValidated || o.isSent) ? Icons.send : Icons.lock_outline),
+            label: Text((o.allValidated || o.isSent) ? 'Préparer les messages' : 'Encore $remaining à valider'),
+          ),
         ]),
       ),
     ]);
   }
 }
 
-class _DeptName extends StatelessWidget {
-  final Line line;
-  final bool night;
-  const _DeptName({required this.line, required this.night});
+class _RoundBtn extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+  final String tooltip;
+  const _RoundBtn({required this.icon, required this.onTap, required this.tooltip});
   @override
-  Widget build(BuildContext context) {
-    final p = night ? line.pn : line.pj, f = night ? line.fn : line.fj;
-    final diff = (p != null && f != null && f != p) ? f - p : null;
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text(line.name, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
-      if (diff != null) Text('${diff > 0 ? '+' : ''}$diff / présence', style: const TextStyle(fontSize: 12, color: cMuted)),
-    ]);
-  }
+  Widget build(BuildContext context) => Tooltip(
+        message: tooltip,
+        child: Material(
+          color: Colors.white,
+          shape: const CircleBorder(side: BorderSide(color: K.line)),
+          child: InkWell(
+            customBorder: const CircleBorder(),
+            onTap: () {
+              HapticFeedback.selectionClick();
+              onTap();
+            },
+            child: SizedBox(width: 50, height: 50, child: Icon(icon, size: 28)),
+          ),
+        ),
+      );
 }
 
 class _Total extends StatelessWidget {
   final String label;
   final int value;
-  final bool key_;
-  const _Total(this.label, this.value, {this.key_ = false});
+  final bool strong;
+  const _Total(this.label, this.value, {this.strong = false});
   @override
   Widget build(BuildContext context) => Expanded(
         child: Column(children: [
-          Text(fmt(value), style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: key_ ? cBrand : Colors.black87)),
-          Text(label.toUpperCase(), style: const TextStyle(fontSize: 10, color: cMuted, fontWeight: FontWeight.w700)),
+          Text(fmt(value), style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: strong ? K.red : K.ink)),
+          Text(label.toUpperCase(), style: const TextStyle(fontSize: 10, color: K.muted, fontWeight: FontWeight.w800)),
         ]),
       );
 }
 
-class NumField extends StatefulWidget {
-  final int? initial;
-  final String hint, label;
-  final bool enabled;
-  final ValueChanged<int?> onChanged;
-  const NumField({super.key, required this.initial, required this.hint, required this.enabled, required this.onChanged, required this.label});
+/// Un département : ligne repliée (OK + nombres) ou fiche de saisie ouverte.
+class DeptTile extends StatelessWidget {
+  final Store store;
+  final Line line;
+  final int index;
+  final bool open;
+  final Line? previous;
+  final VoidCallback? onTap;
+  final VoidCallback onValidate;
+  const DeptTile({super.key, required this.store, required this.line, required this.index, required this.open, required this.previous, required this.onTap, required this.onValidate});
+
   @override
-  State<NumField> createState() => _NumFieldState();
+  Widget build(BuildContext context) {
+    final l = line;
+    final filled = l.fj != null || l.fn != null || l.pj != null || l.pn != null;
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
+      decoration: BoxDecoration(
+        color: open ? const Color(0xFFFFFAFA) : (l.ok ? const Color(0xFFF6FBF2) : Colors.white),
+        border: Border(top: const BorderSide(color: K.line), left: BorderSide(color: open ? K.red : Colors.transparent, width: 4)),
+      ),
+      child: Column(children: [
+        InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+            child: Row(children: [
+              OkBadge(ok: l.ok, index: index),
+              const SizedBox(width: 12),
+              Expanded(child: Text(l.name, style: TextStyle(fontSize: 16, fontWeight: open ? FontWeight.w800 : FontWeight.w600))),
+              if (!open)
+                filled || l.ok
+                    ? Text('J ${l.foodDay}  ·  N ${l.foodNight}', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15))
+                    : const Text('À saisir', style: TextStyle(color: K.muted, fontStyle: FontStyle.italic)),
+              if (onTap != null) Icon(open ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down, color: K.muted),
+            ]),
+          ),
+        ),
+        if (open)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 14),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              DishStepper(
+                key: ValueKey('${store.rev}|${store.date}|${l.id}|j'),
+                label: 'Jour',
+                icon: Icons.wb_sunny_outlined,
+                value: l.fj ?? l.pj,
+                previous: previous?.foodDay,
+                onChanged: (v) => store.setDish(l.id, false, v),
+              ),
+              const SizedBox(height: 10),
+              DishStepper(
+                key: ValueKey('${store.rev}|${store.date}|${l.id}|n'),
+                label: 'Nuit',
+                icon: Icons.nightlight_outlined,
+                value: l.fn ?? l.pn,
+                previous: previous?.foodNight,
+                onChanged: (v) => store.setDish(l.id, true, v),
+              ),
+              const SizedBox(height: 12),
+              FilledButton.icon(
+                style: FilledButton.styleFrom(backgroundColor: K.greenBright),
+                onPressed: () {
+                  FocusScope.of(context).unfocus();
+                  onValidate();
+                },
+                icon: const Icon(Icons.check_rounded, size: 26),
+                label: Text('Valider ${l.name}'),
+              ),
+            ]),
+          ),
+      ]),
+    );
+  }
 }
 
-class _NumFieldState extends State<NumField> {
-  late final TextEditingController c = TextEditingController(text: widget.initial?.toString() ?? '');
+/// Saisie d'un nombre de plats : gros boutons − / + (appui long = ±10) et clavier.
+class DishStepper extends StatefulWidget {
+  final String label;
+  final IconData icon;
+  final int? value;
+  final int? previous;
+  final ValueChanged<int?> onChanged;
+  const DishStepper({super.key, required this.label, required this.icon, required this.value, required this.previous, required this.onChanged});
+  @override
+  State<DishStepper> createState() => _DishStepperState();
+}
+
+class _DishStepperState extends State<DishStepper> {
+  late final TextEditingController c = TextEditingController(text: widget.value?.toString() ?? '');
+
   @override
   void dispose() {
     c.dispose();
     super.dispose();
   }
 
-  @override
-  Widget build(BuildContext context) => Semantics(
-        label: widget.label,
-        child: TextField(
-          controller: c,
-          enabled: widget.enabled,
-          keyboardType: TextInputType.number,
-          inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(4)],
-          textAlign: TextAlign.center,
-          textInputAction: TextInputAction.next,
-          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-          decoration: InputDecoration(
-            hintText: widget.hint,
-            hintStyle: const TextStyle(color: Color(0xFFA0ACA7)),
-            contentPadding: const EdgeInsets.symmetric(vertical: 10),
-            fillColor: widget.enabled ? const Color(0xFFF3F6F4) : Colors.transparent,
-            border: widget.enabled ? const OutlineInputBorder() : InputBorder.none,
-          ),
-          onChanged: (v) => widget.onChanged(v.isEmpty ? null : int.tryParse(v)),
+  int get current => int.tryParse(c.text) ?? 0;
+
+  void setValue(int v) {
+    v = v.clamp(0, 9999);
+    c.text = '$v';
+    c.selection = TextSelection.collapsed(offset: c.text.length);
+    widget.onChanged(v);
+    setState(() {});
+  }
+
+  Widget btn(IconData icon, int step) => Material(
+        color: step > 0 ? K.red : Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: step > 0 ? K.red : K.line, width: 1.5)),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: () {
+            if (step < 0 && current == 0) {
+              Fx.error();
+              return;
+            }
+            Fx.tick();
+            setValue(current + step);
+          },
+          onLongPress: () {
+            Fx.tick();
+            setValue(current + step * 10);
+          },
+          child: SizedBox(width: 58, height: 54, child: Icon(icon, size: 30, color: step > 0 ? Colors.white : K.ink)),
         ),
       );
+
+  @override
+  Widget build(BuildContext context) {
+    final p = widget.previous;
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Row(children: [
+        Icon(widget.icon, size: 18, color: K.muted),
+        const SizedBox(width: 6),
+        Text('Plats ${widget.label.toLowerCase()}', style: const TextStyle(fontWeight: FontWeight.w700, color: K.muted)),
+        const Spacer(),
+        if (p != null)
+          InkWell(
+            onTap: () {
+              Fx.tick();
+              setValue(p);
+            },
+            borderRadius: BorderRadius.circular(99),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(color: K.sunk, borderRadius: BorderRadius.circular(99)),
+              child: Text('Veille : $p', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+            ),
+          ),
+      ]),
+      const SizedBox(height: 6),
+      Row(children: [
+        btn(Icons.remove, -1),
+        const SizedBox(width: 10),
+        Expanded(
+          child: TextField(
+            controller: c,
+            keyboardType: TextInputType.number,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(4)],
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w900),
+            decoration: const InputDecoration(hintText: '0', contentPadding: EdgeInsets.symmetric(vertical: 10)),
+            onChanged: (v) => widget.onChanged(v.isEmpty ? null : int.tryParse(v)),
+          ),
+        ),
+        const SizedBox(width: 10),
+        btn(Icons.add, 1),
+      ]),
+    ]);
+  }
 }
 
 // ===========================================================================
@@ -461,12 +730,17 @@ class EnvoiTab extends StatelessWidget {
 
   Future<void> openWa(BuildContext context, String phone, String text) async {
     store.flush();
+    HapticFeedback.lightImpact();
     final ok = await launchUrl(whatsappUri(phone, text), mode: LaunchMode.externalApplication).catchError((_) => false);
-    if (!ok && context.mounted) snack(context, "WhatsApp n'a pas pu s'ouvrir. Utilisez « Copier ».");
+    if (!ok && context.mounted) {
+      Fx.error();
+      snack(context, "WhatsApp n'a pas pu s'ouvrir. Utilisez « Copier ».");
+    }
   }
 
   Future<void> copy(BuildContext context, String text) async {
     await Clipboard.setData(ClipboardData(text: text));
+    Fx.tick();
     if (context.mounted) snack(context, 'Message copié.');
   }
 
@@ -483,29 +757,39 @@ class EnvoiTab extends StatelessWidget {
         ]),
         actions: [
           TextButton(onPressed: () => Navigator.pop(c), child: const Text('Annuler')),
-          FilledButton(onPressed: () => Navigator.pop(c, ctrl.text.trim()), child: const Text('Rectifier')),
+          FilledButton(style: FilledButton.styleFrom(minimumSize: const Size(0, 44)), onPressed: () => Navigator.pop(c, ctrl.text.trim()), child: const Text('Rectifier')),
         ],
       ),
     );
     if (reason == null) return;
     if (reason.isEmpty) {
+      Fx.error();
       if (context.mounted) snack(context, 'Indiquez le motif de la rectification.');
       return;
     }
     store.rectify(reason);
+    Fx.tick();
     onEdit();
-    if (context.mounted) snack(context, 'Corrigez les chiffres puis renvoyez le rectificatif.');
+    if (context.mounted) snack(context, 'Corrigez les nombres, validez, puis renvoyez le rectificatif.');
   }
 
-  Widget msgCard(BuildContext context, String title, String sub, String text, List<Widget> buttons) => SectionCard(
+  Widget msgCard(String step, String title, String sub, String text, List<Widget> buttons) => SectionCard(
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
-          Text(sub, style: const TextStyle(color: cMuted, fontSize: 13)),
+          Row(children: [
+            CircleAvatar(radius: 14, backgroundColor: K.red, child: Text(step, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800))),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(title, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+                Text(sub, style: const TextStyle(color: K.muted, fontSize: 13)),
+              ]),
+            ),
+          ]),
           const SizedBox(height: 10),
           Container(
             padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(color: const Color(0xFFE9EEEB), borderRadius: BorderRadius.circular(8)),
-            child: SelectableText(text, style: const TextStyle(fontFamily: 'monospace', fontSize: 13.5, height: 1.4)),
+            decoration: BoxDecoration(color: const Color(0xFFE7F5E9), borderRadius: BorderRadius.circular(10)),
+            child: SelectableText(text, style: const TextStyle(fontSize: 14.5, height: 1.4)),
           ),
           const SizedBox(height: 10),
           Wrap(spacing: 8, runSpacing: 8, children: buttons),
@@ -513,64 +797,76 @@ class EnvoiTab extends StatelessWidget {
       );
 
   Widget waBtn(BuildContext context, String label, String phone, String text) => FilledButton.icon(
-        style: FilledButton.styleFrom(backgroundColor: cWa, minimumSize: const Size(0, 46)),
+        style: FilledButton.styleFrom(backgroundColor: K.wa, minimumSize: const Size(0, 48)),
         onPressed: () => openWa(context, phone, text),
         icon: const Icon(Icons.chat),
         label: Text(label),
       );
 
   Widget smallBtn(String label, IconData icon, VoidCallback f) =>
-      OutlinedButton.icon(style: OutlinedButton.styleFrom(minimumSize: const Size(0, 46)), onPressed: f, icon: Icon(icon, size: 18), label: Text(label));
+      OutlinedButton.icon(style: OutlinedButton.styleFrom(minimumSize: const Size(0, 48)), onPressed: f, icon: Icon(icon, size: 18), label: Text(label));
 
   @override
   Widget build(BuildContext context) {
     final o = store.cur, t = o.totals, st = store.settings;
     final view = o.copy()..author = o.isSent ? o.author : store.profile.name;
     final m1 = orderMessage(view), m2 = sharingMessage(view);
-    return ListView(padding: const EdgeInsets.fromLTRB(16, 14, 16, 24), children: [
-      Text('Envoi du ${dmy(o.date)}', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w700)),
+    final ready = o.allValidated || o.isSent;
+    return ListView(padding: const EdgeInsets.fromLTRB(14, 14, 14, 24), children: [
+      Text('Envoi du ${dmy(o.date)}', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800)),
       const SizedBox(height: 10),
-      if (t.total == 0) ...[
-        notice('Aucun plat saisi pour cette date.', action: TextButton(onPressed: onEdit, child: const Text('Retour à la saisie'))),
+      if (!ready) ...[
+        notice('Validez encore ${o.lines.length - o.validatedCount} département(s) avant d\'envoyer.',
+            icon: Icons.lock_outline, action: TextButton(onPressed: onEdit, child: const Text('Retour à la saisie'))),
         const SizedBox(height: 10),
       ],
-      msgCard(context, '1 · Commande', 'Au restaurateur et au comptable', m1, [
-        waBtn(context, 'Restaurateur', st.phoneResto, m1),
-        waBtn(context, 'Comptable', st.phoneCompta, m1),
-        smallBtn('Copier', Icons.copy, () => copy(context, m1)),
-        smallBtn('Partager', Icons.share, () => Share.share(m1)),
-      ]),
-      const SizedBox(height: 12),
-      msgCard(context, '2 · Répartition par département', "À l'équipe de gestion et de partage", m2, [
-        waBtn(context, 'Équipe partage', st.phonePartage, m2),
-        smallBtn('Copier', Icons.copy, () => copy(context, m2)),
-        smallBtn('Partager', Icons.share, () => Share.share(m2)),
-      ]),
+      Opacity(
+        opacity: ready ? 1 : .45,
+        child: IgnorePointer(
+          ignoring: !ready,
+          child: Column(children: [
+            msgCard('1', 'Commande', 'Au restaurateur et au comptable', m1, [
+              waBtn(context, 'Restaurateur', st.phoneResto, m1),
+              waBtn(context, 'Comptable', st.phoneCompta, m1),
+              smallBtn('Copier', Icons.copy, () => copy(context, m1)),
+              smallBtn('Partager', Icons.share, () => Share.share(m1)),
+            ]),
+            const SizedBox(height: 12),
+            msgCard('2', 'Répartition par département', "À l'équipe de gestion et de partage", m2, [
+              waBtn(context, 'Équipe partage', st.phonePartage, m2),
+              smallBtn('Copier', Icons.copy, () => copy(context, m2)),
+              smallBtn('Partager', Icons.share, () => Share.share(m2)),
+            ]),
+          ]),
+        ),
+      ),
       const SizedBox(height: 16),
       if (o.isSent) ...[
-        notice('Envoi confirmé${o.sentAt != null ? ' à ${hm(o.sentAt)}' : ''}${o.author.isNotEmpty ? ' par ${o.author}' : ''}. La commande est verrouillée.', bg: cOkSoft, fg: cOk),
+        notice('Envoi confirmé${o.sentAt != null ? ' à ${hm(o.sentAt)}' : ''}${o.author.isNotEmpty ? ' par ${o.author}' : ''}. La commande est verrouillée.',
+            bg: K.greenSoft, fg: K.green, icon: Icons.verified),
         for (final r in o.revisions)
           Padding(
             padding: const EdgeInsets.only(top: 6),
             child: Text(
                 'Rectifiée le ${dmy('${r['at']}'.substring(0, 10))} à ${hm('${r['at']}')} par ${r['by'] ?? ''} : ${r['reason'] ?? ''} (avant : jour ${(r['before'] as Map?)?['day'] ?? '?'}, nuit ${(r['before'] as Map?)?['night'] ?? '?'})',
-                style: const TextStyle(color: cMuted, fontSize: 13)),
+                style: const TextStyle(color: K.muted, fontSize: 13)),
           ),
         const SizedBox(height: 12),
         OutlinedButton.icon(
-          style: OutlinedButton.styleFrom(foregroundColor: cBad, side: const BorderSide(color: cBad)),
+          style: OutlinedButton.styleFrom(foregroundColor: K.red, side: const BorderSide(color: K.red)),
           onPressed: () => rectify(context),
           icon: const Icon(Icons.edit),
           label: const Text('Rectifier cette commande'),
         ),
-      ] else ...[
-        const Text('Après l\'envoi des deux messages sur WhatsApp, confirmez ici. La commande sera verrouillée et datée.', style: TextStyle(color: cMuted)),
+      ] else if (ready) ...[
+        const Text("Après l'envoi des deux messages sur WhatsApp, confirmez ici. La commande sera verrouillée et datée.", style: TextStyle(color: K.muted)),
         const SizedBox(height: 10),
         FilledButton.icon(
           onPressed: t.total == 0
               ? null
               : () {
                   store.confirmSent();
+                  Fx.success();
                   snack(context, 'Commande confirmée et verrouillée.');
                 },
           icon: const Icon(Icons.check_circle),
@@ -613,24 +909,27 @@ class _HistoriqueTabState extends State<HistoriqueTab> {
         total += t.total;
       }
       rows.add(InkWell(
-        onTap: () => widget.onOpen(k),
+        onTap: () {
+          HapticFeedback.selectionClick();
+          widget.onOpen(k);
+        },
         child: Container(
-          decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: cLine))),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: K.line))),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
           child: Row(children: [
-            SizedBox(width: 92, child: Text(dmy(k), style: TextStyle(fontWeight: FontWeight.w600, color: o == null ? cMuted : Colors.black87))),
+            SizedBox(width: 92, child: Text(dmy(k), style: TextStyle(fontWeight: FontWeight.w700, color: o == null ? K.muted : K.ink))),
             Expanded(
                 child: Text(t == null ? '—' : 'Jour ${t.day} (${t.place} + ${t.pit})  ·  Nuit ${t.night}',
-                    style: TextStyle(color: o == null ? cMuted : Colors.black87, fontSize: 13))),
-            if (t != null) Padding(padding: const EdgeInsets.only(right: 8), child: Text('${t.total}', style: const TextStyle(fontWeight: FontWeight.w800))),
+                    style: TextStyle(color: o == null ? K.muted : K.ink, fontSize: 13))),
+            if (t != null) Padding(padding: const EdgeInsets.only(right: 8), child: Text('${t.total}', style: const TextStyle(fontWeight: FontWeight.w900))),
             statusPill(o),
           ]),
         ),
       ));
     }
-    return ListView(padding: const EdgeInsets.fromLTRB(16, 14, 16, 24), children: [
+    return ListView(padding: const EdgeInsets.fromLTRB(14, 14, 14, 24), children: [
       Row(children: [
-        const Expanded(child: Text('Historique', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700))),
+        const Expanded(child: Text('Historique', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800))),
         DropdownButton<String>(
           value: m,
           items: [for (final x in months) DropdownMenuItem(value: x, child: Text(monthLabelNice(x)))],
@@ -643,17 +942,17 @@ class _HistoriqueTabState extends State<HistoriqueTab> {
         child: Column(children: [
           ...rows,
           Container(
-            color: const Color(0xFFE3E9E5),
+            color: K.sunk,
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
             child: Row(children: [
-              const Expanded(child: Text('TOTAL', style: TextStyle(fontWeight: FontWeight.w800))),
-              Text('Jour ${fmt(day)} · Nuit ${fmt(night)} · ${fmt(total)} plats', style: const TextStyle(fontWeight: FontWeight.w700)),
+              const Expanded(child: Text('TOTAL', style: TextStyle(fontWeight: FontWeight.w900))),
+              Text('Jour ${fmt(day)} · Nuit ${fmt(night)} · ${fmt(total)} plats', style: const TextStyle(fontWeight: FontWeight.w800)),
             ]),
           ),
         ]),
       ),
       const SizedBox(height: 8),
-      const Text('Touchez une ligne pour ouvrir la commande.', style: TextStyle(color: cMuted, fontSize: 13)),
+      const Text('Touchez une ligne pour ouvrir la commande.', style: TextStyle(color: K.muted, fontSize: 13)),
     ]);
   }
 }
@@ -674,31 +973,34 @@ class _RapportTabState extends State<RapportTab> {
 
   Future<void> export(String m) async {
     setState(() => busy = true);
+    HapticFeedback.lightImpact();
     try {
       await Future<void>.delayed(const Duration(milliseconds: 50));
       final bytes = buildReport(month: m, orders: widget.store.orders, price: widget.store.settings.price);
       final dir = await getTemporaryDirectory();
       final f = File('${dir.path}/${reportFileName(m)}');
       await f.writeAsBytes(bytes, flush: true);
+      Fx.ok();
       await Share.shareXFiles(
         [XFile(f.path, mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')],
         subject: 'Rapport repas ${monthLabelNice(m)} — DSCI Séguéla',
         text: 'Bonjour, veuillez trouver ci-joint le rapport des commandes de repas de ${monthLabelNice(m).toLowerCase()} (DSCI Séguéla).',
       );
     } catch (e) {
+      Fx.error();
       if (mounted) snack(context, "Le rapport n'a pas pu être créé : $e");
     }
     if (mounted) setState(() => busy = false);
   }
 
   Widget kpi(String label, String value, {bool money = false, String? sub}) => Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(color: money ? cBrand : Colors.white, border: Border.all(color: money ? cBrand : cLine), borderRadius: BorderRadius.circular(10)),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(color: money ? K.red : Colors.white, border: Border.all(color: money ? K.red : K.line), borderRadius: BorderRadius.circular(14)),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(label.toUpperCase(), style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: money ? Colors.white70 : cMuted)),
+          Text(label.toUpperCase(), style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: money ? Colors.white70 : K.muted)),
           const SizedBox(height: 2),
-          Text(value, style: TextStyle(fontSize: money ? 28 : 26, fontWeight: FontWeight.w800, color: money ? Colors.white : Colors.black87)),
-          if (sub != null) Text(sub, style: TextStyle(fontSize: 12, color: money ? Colors.white70 : cMuted)),
+          Text(value, style: TextStyle(fontSize: money ? 28 : 26, fontWeight: FontWeight.w900, color: money ? Colors.white : K.ink)),
+          if (sub != null) Text(sub, style: TextStyle(fontSize: 12, color: money ? Colors.white70 : K.muted)),
         ]),
       );
 
@@ -732,10 +1034,11 @@ class _RapportTabState extends State<RapportTab> {
       if (missing > 0) '$missing jour(s) passé(s) sans commande enregistrée.',
       if (drafts > 0) '$drafts commande(s) en brouillon, non confirmée(s).',
     ];
-    final ids = agg.keys.toList()..sort((a, b) => (agg[a]![1] == 'pit' ? 1 : 0).compareTo(agg[b]![1] == 'pit' ? 1 : 0));
-    return ListView(padding: const EdgeInsets.fromLTRB(16, 14, 16, 24), children: [
+    final ids = agg.keys.where((id) => (agg[id]![2] as int) + (agg[id]![3] as int) > 0).toList()
+      ..sort((a, b) => (agg[a]![1] == 'pit' ? 1 : 0).compareTo(agg[b]![1] == 'pit' ? 1 : 0));
+    return ListView(padding: const EdgeInsets.fromLTRB(14, 14, 14, 24), children: [
       Row(children: [
-        const Expanded(child: Text('Rapport mensuel', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700))),
+        const Expanded(child: Text('Rapport mensuel', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800))),
         DropdownButton<String>(
           value: m,
           items: [for (final x in months) DropdownMenuItem(value: x, child: Text(monthLabelNice(x)))],
@@ -753,7 +1056,10 @@ class _RapportTabState extends State<RapportTab> {
         Expanded(child: kpi('Moyenne / jour', list.isEmpty ? '0' : fmt(total / list.length))),
       ]),
       const SizedBox(height: 10),
-      if (warn.isNotEmpty) notice(warn.join(' ')) else if (list.isNotEmpty) notice('Toutes les commandes du mois sont confirmées.', bg: cOkSoft, fg: cOk),
+      if (warn.isNotEmpty)
+        notice(warn.join(' '), icon: Icons.warning_amber_rounded)
+      else if (list.isNotEmpty)
+        notice('Toutes les commandes du mois sont confirmées.', bg: K.greenSoft, fg: K.green, icon: Icons.verified),
       const SizedBox(height: 12),
       FilledButton.icon(
         onPressed: (list.isEmpty || busy) ? null : () => export(m),
@@ -763,33 +1069,33 @@ class _RapportTabState extends State<RapportTab> {
       const SizedBox(height: 6),
       const Text(
           "Le fichier contient le récapitulatif du mois avec montants, le cumul par département, l'historique de tous les mois, puis une feuille par jour au format habituel. Vous choisissez ensuite l'application d'envoi (e-mail, WhatsApp…).",
-          style: TextStyle(color: cMuted, fontSize: 13)),
+          style: TextStyle(color: K.muted, fontSize: 13)),
       const SizedBox(height: 14),
       SectionCard(
         padding: EdgeInsets.zero,
         child: Column(children: [
           Container(
-            color: const Color(0xFFE3E9E5),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            color: K.sunk,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
             child: const Row(children: [
-              Expanded(child: Text('DÉPARTEMENT', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: cMuted))),
-              SizedBox(width: 60, child: Text('JOUR', textAlign: TextAlign.right, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: cMuted))),
-              SizedBox(width: 56, child: Text('NUIT', textAlign: TextAlign.right, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: cMuted))),
-              SizedBox(width: 96, child: Text('MONTANT', textAlign: TextAlign.right, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: cMuted))),
+              Expanded(child: Text('DÉPARTEMENT', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: K.muted))),
+              SizedBox(width: 56, child: Text('JOUR', textAlign: TextAlign.right, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: K.muted))),
+              SizedBox(width: 52, child: Text('NUIT', textAlign: TextAlign.right, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: K.muted))),
+              SizedBox(width: 96, child: Text('MONTANT', textAlign: TextAlign.right, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: K.muted))),
             ]),
           ),
-          if (ids.isEmpty) const Padding(padding: EdgeInsets.all(14), child: Text('Aucune commande ce mois-ci.', style: TextStyle(color: cMuted))),
+          if (ids.isEmpty) const Padding(padding: EdgeInsets.all(14), child: Text('Aucune commande ce mois-ci.', style: TextStyle(color: K.muted))),
           for (final id in ids)
             Container(
-              decoration: const BoxDecoration(border: Border(top: BorderSide(color: cLine))),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+              decoration: const BoxDecoration(border: Border(top: BorderSide(color: K.line))),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               child: Row(children: [
                 Expanded(child: Text('${agg[id]![0]}${agg[id]![1] == 'pit' ? ' · pit' : ''}')),
-                SizedBox(width: 60, child: Text(fmt(agg[id]![2] as int), textAlign: TextAlign.right)),
-                SizedBox(width: 56, child: Text(fmt(agg[id]![3] as int), textAlign: TextAlign.right)),
+                SizedBox(width: 56, child: Text(fmt(agg[id]![2] as int), textAlign: TextAlign.right)),
+                SizedBox(width: 52, child: Text(fmt(agg[id]![3] as int), textAlign: TextAlign.right)),
                 SizedBox(
                     width: 96,
-                    child: Text(fmt(((agg[id]![2] as int) + (agg[id]![3] as int)) * price), textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.w700))),
+                    child: Text(fmt(((agg[id]![2] as int) + (agg[id]![3] as int)) * price), textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.w800))),
               ]),
             ),
         ]),
@@ -852,6 +1158,7 @@ class _ReglagesTabState extends State<ReglagesTab> {
       out.add(Dept(id, n, depts[i].zone));
     }
     if (out.isEmpty) {
+      Fx.error();
       snack(context, 'Gardez au moins un département.');
       return;
     }
@@ -867,10 +1174,12 @@ class _ReglagesTabState extends State<ReglagesTab> {
     try {
       await widget.store.saveSettings(st).timeout(const Duration(seconds: 20));
       loadForm();
+      Fx.ok();
       if (mounted) snack(context, 'Réglages enregistrés.');
     } on TimeoutException {
       if (mounted) snack(context, 'Réglages gardés sur le téléphone ; ils seront envoyés dès que le réseau revient.');
     } catch (e) {
+      Fx.error();
       if (mounted) snack(context, 'Enregistrement impossible : $e');
     }
     if (mounted) setState(() => saving = false);
@@ -886,11 +1195,15 @@ class _ReglagesTabState extends State<ReglagesTab> {
     try {
       final raw = await rootBundle.loadString('assets/seed_octobre_2026.json');
       final n = await widget.store.importSeed(jsonDecode(raw) as List<dynamic>).timeout(const Duration(seconds: 30));
-      if (mounted) snack(context, n == 0 ? 'Octobre 2026 est déjà dans l\'historique.' : '$n jours d\'octobre 2026 importés.');
+      Fx.ok();
+      if (mounted) snack(context, n == 0 ? "Octobre 2026 est déjà dans l'historique." : "$n jours d'octobre 2026 importés.");
     } catch (e) {
+      Fx.error();
       if (mounted) snack(context, 'Import impossible : $e');
     }
   }
+
+  Widget title(String t) => Padding(padding: const EdgeInsets.only(bottom: 8), child: Text(t, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800)));
 
   @override
   Widget build(BuildContext context) {
@@ -898,17 +1211,17 @@ class _ReglagesTabState extends State<ReglagesTab> {
     if (!loadedForm) loadForm();
     final p = s.profile;
     final hasOct = s.orders.keys.any((k) => k.startsWith('2026-10'));
-    return ListView(padding: const EdgeInsets.fromLTRB(16, 14, 16, 32), children: [
-      const Text('Réglages', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700)),
+    return ListView(padding: const EdgeInsets.fromLTRB(14, 14, 14, 32), children: [
+      const Text('Réglages', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800)),
       const SizedBox(height: 10),
       SectionCard(
         child: Row(children: [
-          CircleAvatar(backgroundColor: cBrandSoft, child: Text(p.name.isEmpty ? '?' : p.name[0].toUpperCase(), style: const TextStyle(color: cBrand, fontWeight: FontWeight.w700))),
+          CircleAvatar(backgroundColor: K.redSoft, child: Text(p.name.isEmpty ? '?' : p.name[0].toUpperCase(), style: const TextStyle(color: K.red, fontWeight: FontWeight.w800))),
           const SizedBox(width: 12),
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(p.name, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
-              Text('${p.email} · ${p.isAdmin ? 'Administrateur' : 'Agent RH'}', style: const TextStyle(color: cMuted, fontSize: 13)),
+              Text(p.name, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+              Text('${p.email} · ${p.isAdmin ? 'Administrateur' : 'Agent RH'}', style: const TextStyle(color: K.muted, fontSize: 13)),
             ]),
           ),
           TextButton(onPressed: () => FirebaseAuth.instance.signOut(), child: const Text('Déconnexion')),
@@ -916,9 +1229,36 @@ class _ReglagesTabState extends State<ReglagesTab> {
       ),
       const SizedBox(height: 12),
       SectionCard(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        child: Column(children: [
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            secondary: const Icon(Icons.volume_up_outlined),
+            title: const Text('Son de validation'),
+            value: Fx.sound,
+            onChanged: (v) async {
+              await Fx.setSound(v);
+              if (v) Fx.ok();
+              setState(() {});
+            },
+          ),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            secondary: const Icon(Icons.vibration),
+            title: const Text('Vibration au toucher'),
+            value: Fx.vibrate,
+            onChanged: (v) async {
+              await Fx.setVibrate(v);
+              if (v) Fx.ok();
+              setState(() {});
+            },
+          ),
+        ]),
+      ),
+      const SizedBox(height: 12),
+      SectionCard(
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          const Text('Commande', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
-          const SizedBox(height: 12),
+          title('Commande'),
           Row(children: [
             Expanded(
                 child: TextField(
@@ -931,20 +1271,20 @@ class _ReglagesTabState extends State<ReglagesTab> {
           ]),
           const SizedBox(height: 14),
           const Text('Numéros WhatsApp au format international, sans + ni espaces (ex. 2250700000000). Laissés vides, WhatsApp vous laisse choisir le contact ou le groupe.',
-              style: TextStyle(color: cMuted, fontSize: 13)),
+              style: TextStyle(color: K.muted, fontSize: 13)),
           const SizedBox(height: 10),
-          TextField(controller: resto, keyboardType: TextInputType.phone, decoration: const InputDecoration(labelText: 'Restaurateur')),
+          TextField(controller: resto, keyboardType: TextInputType.phone, decoration: const InputDecoration(labelText: 'Restaurateur', prefixIcon: Icon(Icons.storefront))),
           const SizedBox(height: 10),
-          TextField(controller: compta, keyboardType: TextInputType.phone, decoration: const InputDecoration(labelText: 'Comptable')),
+          TextField(controller: compta, keyboardType: TextInputType.phone, decoration: const InputDecoration(labelText: 'Comptable', prefixIcon: Icon(Icons.account_balance))),
           const SizedBox(height: 10),
-          TextField(controller: partage, keyboardType: TextInputType.phone, decoration: const InputDecoration(labelText: 'Équipe gestion et partage')),
+          TextField(controller: partage, keyboardType: TextInputType.phone, decoration: const InputDecoration(labelText: 'Équipe gestion et partage', prefixIcon: Icon(Icons.groups))),
         ]),
       ),
       const SizedBox(height: 12),
       SectionCard(
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          const Text('Départements', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
-          const Text("L'ordre ici est l'ordre de saisie et des feuilles Excel.", style: TextStyle(color: cMuted, fontSize: 13)),
+          title('Départements'),
+          const Text("L'ordre ici est l'ordre de saisie et des feuilles Excel.", style: TextStyle(color: K.muted, fontSize: 13)),
           const SizedBox(height: 8),
           for (var i = 0; i < depts.length; i++)
             Padding(
@@ -974,7 +1314,7 @@ class _ReglagesTabState extends State<ReglagesTab> {
                           depts.removeAt(i);
                           names.removeAt(i);
                         }),
-                    icon: const Icon(Icons.close, color: cBad)),
+                    icon: const Icon(Icons.close, color: K.red)),
               ]),
             ),
           const SizedBox(height: 6),
@@ -1001,8 +1341,10 @@ class _ReglagesTabState extends State<ReglagesTab> {
           OutlinedButton.icon(onPressed: importOctober, icon: const Icon(Icons.download), label: const Text("Importer l'historique d'octobre 2026")),
         ],
       ],
-      const SizedBox(height: 20),
-      const Center(child: Text('Repas Séguéla · version 1.0', style: TextStyle(color: cMuted, fontSize: 12))),
+      const SizedBox(height: 24),
+      const Center(child: Brand(size: 40, showCountry: false)),
+      const SizedBox(height: 6),
+      const Center(child: Text('Repas Séguéla · version 1.1', style: TextStyle(color: K.muted, fontSize: 12))),
     ]);
   }
 }
@@ -1031,19 +1373,22 @@ class _AdminSectionState extends State<AdminSection> {
         ]),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Annuler')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, c.text.trim()), child: const Text('Enregistrer')),
+          FilledButton(style: FilledButton.styleFrom(minimumSize: const Size(0, 44)), onPressed: () => Navigator.pop(ctx, c.text.trim()), child: const Text('Enregistrer')),
         ],
       ),
     );
     if (v == null) return;
     if (v.length < 4) {
+      Fx.error();
       if (mounted) snack(context, 'Le code compte au moins 4 caractères.');
       return;
     }
     try {
       await db.doc('config/access').update({'code': v});
+      Fx.ok();
       if (mounted) snack(context, 'Code modifié.');
     } catch (e) {
+      Fx.error();
       if (mounted) snack(context, 'Modification impossible : $e');
     }
   }
@@ -1053,7 +1398,11 @@ class _AdminSectionState extends State<AdminSection> {
     final me = widget.store.profile.uid;
     return SectionCard(
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        const Text('Administration', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+        const Row(children: [
+          Icon(Icons.admin_panel_settings, color: K.red),
+          SizedBox(width: 8),
+          Text('Administration', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+        ]),
         const SizedBox(height: 8),
         StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
           stream: db.doc('config/access').snapshots(),
@@ -1062,17 +1411,17 @@ class _AdminSectionState extends State<AdminSection> {
             return ListTile(
               contentPadding: EdgeInsets.zero,
               title: const Text("Code d'accès du site"),
-              subtitle: SelectableText(code, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700, letterSpacing: 1)),
+              subtitle: SelectableText(code, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900, letterSpacing: 1.5, color: K.ink)),
               trailing: TextButton(onPressed: () => changeCode(code == '…' ? '' : code), child: const Text('Modifier')),
             );
           },
         ),
         const Divider(),
-        const Text('Comptes des agents RH', style: TextStyle(fontWeight: FontWeight.w700)),
+        const Text('Comptes des agents RH', style: TextStyle(fontWeight: FontWeight.w800)),
         StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
           stream: db.collection('users').snapshots(),
           builder: (context, snap) {
-            if (!snap.hasData) return const Padding(padding: EdgeInsets.all(12), child: Text('Chargement…', style: TextStyle(color: cMuted)));
+            if (!snap.hasData) return const Padding(padding: EdgeInsets.all(12), child: Text('Chargement…', style: TextStyle(color: K.muted)));
             final users = snap.data!.docs.map((d) => AgentProfile.fromMap(d.id, d.data())).toList()..sort((a, b) => a.name.compareTo(b.name));
             return Column(children: [
               for (final u in users)
@@ -1081,9 +1430,14 @@ class _AdminSectionState extends State<AdminSection> {
                   title: Text('${u.name}${u.isAdmin ? ' · admin' : ''}'),
                   subtitle: Text(u.email),
                   value: u.active,
-                  onChanged: u.uid == me ? null : (v) => db.doc('users/${u.uid}').update({'active': v}),
+                  onChanged: u.uid == me
+                      ? null
+                      : (v) {
+                          HapticFeedback.selectionClick();
+                          db.doc('users/${u.uid}').update({'active': v});
+                        },
                 ),
-              const Text('Désactivez un compte quand un agent quitte le service : il ne pourra plus rien voir.', style: TextStyle(color: cMuted, fontSize: 12)),
+              const Text('Désactivez un compte quand un agent quitte le service : il ne pourra plus rien voir.', style: TextStyle(color: K.muted, fontSize: 12)),
             ]);
           },
         ),

@@ -3,7 +3,9 @@
 Application de commande journalière des repas (jour et nuit) pour **DESIMONE CI, site de Séguéla**.
 
 - Chaque agent RH crée son compte (e-mail + mot de passe + **code d'accès du site**).
-- Saisie de la présence et des plats par département, sur place et au pit (bols).
+- Saisie des plats jour et nuit par département (sur place / au pit en bols), avec de gros boutons − / +.
+- Chaque département se valide : « OK » vert, son de validation et vibration légère ; le département suivant s'ouvre tout seul.
+- Couleurs et logo DE SIMONE C.I.
 - Deux messages WhatsApp prêts à envoyer : la commande (restaurateur + comptable) et la répartition par département (équipe de partage).
 - Confirmation d'envoi, verrouillage, rectificatif tracé avec motif.
 - Historique partagé entre tous les agents, utilisable sans réseau (synchronisation au retour du réseau).
