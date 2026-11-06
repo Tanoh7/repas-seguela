@@ -4,7 +4,12 @@ import json, sys, os
 src, dst = sys.argv[1], sys.argv[2]
 PKG = "ci.desimone.repas_seguela"
 if not os.path.exists(src):
-    sys.exit("ERREUR : firebase/google-services.json est absent. Téléversez le fichier fourni par Firebase dans le dossier 'firebase' du dépôt.")
+    print("ATTENTION : firebase/google-services.json est absent — compilation de contrôle uniquement (APK non publié).")
+    if os.environ.get("GITHUB_OUTPUT"):
+        open(os.environ["GITHUB_OUTPUT"], "a").write("configured=false\n")
+    sys.exit(0)
+if os.environ.get("GITHUB_OUTPUT"):
+    open(os.environ["GITHUB_OUTPUT"], "a").write("configured=true\n")
 g = json.load(open(src, encoding="utf-8"))
 info = g["project_info"]
 clients = g.get("client", [])

@@ -33,6 +33,7 @@ jobs:
           python3 tool/prepare_android.py
 
       - name: Configuration Firebase
+        id: fb
         run: python3 tool/gen_options.py firebase/google-services.json lib/firebase_options.dart
 
       - name: Clé de signature fixe (mises à jour sans désinstaller)
@@ -59,6 +60,7 @@ jobs:
           path: RepasSeguela-v${{ steps.name.outputs.version }}.apk
 
       - name: Publier la version (page Releases)
+        if: steps.fb.outputs.configured == 'true'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.name.outputs.version }}
