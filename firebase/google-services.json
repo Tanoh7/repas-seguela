@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "382577845319",
+    "project_id": "repas-seguela-6d20a",
+    "storage_bucket": "repas-seguela-6d20a.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:382577845319:android:55489a25f249ca4a90fd62",
+        "android_client_info": {
+          "package_name": "ci.desimone.repas_seguela"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCfk1KUODt2MdlYfdFvCjLN-70J2FcgfAs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
