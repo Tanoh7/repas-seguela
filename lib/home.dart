@@ -6,6 +6,7 @@ import 'package:cloud_firestore/cloud_firestore.dart' hide Order;
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -85,6 +86,34 @@ class SectionCard extends StatelessWidget {
       );
 }
 
+/// Photo de profil ronde (ou initiale si pas de photo).
+class Avatar extends StatelessWidget {
+  final PublicProfile? profile;
+  final String fallbackName;
+  final double size;
+  const Avatar({super.key, required this.profile, this.fallbackName = '', this.size = 40});
+  @override
+  Widget build(BuildContext context) {
+    final bytes = profile?.photoBytes;
+    final name = (profile?.name.isNotEmpty ?? false) ? profile!.name : fallbackName;
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: K.redSoft,
+        border: Border.all(color: Colors.white, width: size > 50 ? 3 : 1.5),
+        boxShadow: size > 50 ? const [BoxShadow(color: Color(0x22000000), blurRadius: 8, offset: Offset(0, 2))] : null,
+        image: bytes == null ? null : DecorationImage(image: MemoryImage(bytes), fit: BoxFit.cover),
+      ),
+      alignment: Alignment.center,
+      child: bytes != null
+          ? null
+          : Text(name.isEmpty ? '?' : name.trim()[0].toUpperCase(), style: TextStyle(color: K.red, fontWeight: FontWeight.w900, fontSize: size * .42)),
+    );
+  }
+}
+
 // ===========================================================================
 class HomeScreen extends StatefulWidget {
   final Store store;
@@ -117,6 +146,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     WidgetsBinding.instance.removeObserver(this);
     clock?.cancel();
     super.dispose();
+  }
+
+  Future<void> openEnvoi(Store s) async {
+    s.flush();
+    final r = await Navigator.of(context).push<String>(MaterialPageRoute(builder: (_) => EnvoiPage(store: s)));
+    if (!mounted) return;
+    if (r == 'done') go(0);
+    if (r == 'edit') go(1);
   }
 
   void go(int i) {
@@ -195,11 +232,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 child: notice('Hors connexion : tout est gardé sur le téléphone et sera envoyé dès que le réseau revient.', icon: Icons.cloud_off)),
           Expanded(
             child: IndexedStack(index: tab, children: [
-              CommandeTab(store: s, onSend: () => go(1)),
-              EnvoiTab(store: s, onEdit: () => go(0)),
+              AccueilTab(store: s, onOrder: () {
+                if (s.date != todayIso()) s.goDate(todayIso());
+                go(1);
+              }),
+              CommandeTab(key: ValueKey('cmd-${s.closeSignal}'), store: s, onSend: () => openEnvoi(s)),
               HistoriqueTab(store: s, onOpen: (d) {
                 s.goDate(d);
-                go(0);
+                go(1);
               }),
               RapportTab(store: s),
               ReglagesTab(store: s),
@@ -211,8 +251,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           onDestinationSelected: go,
           height: 66,
           destinations: const [
+            NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: 'Accueil'),
             NavigationDestination(icon: Icon(Icons.restaurant_menu_outlined), selectedIcon: Icon(Icons.restaurant_menu), label: 'Commande'),
-            NavigationDestination(icon: Icon(Icons.send_outlined), selectedIcon: Icon(Icons.send), label: 'Envoi'),
             NavigationDestination(icon: Icon(Icons.calendar_month_outlined), selectedIcon: Icon(Icons.calendar_month), label: 'Historique'),
             NavigationDestination(icon: Icon(Icons.description_outlined), selectedIcon: Icon(Icons.description), label: 'Rapport'),
             NavigationDestination(icon: Icon(Icons.settings_outlined), selectedIcon: Icon(Icons.settings), label: 'Réglages'),
@@ -236,7 +276,7 @@ class CommandeTab extends StatefulWidget {
 
 class _CommandeTabState extends State<CommandeTab> {
   String? openId; // département ouvert
-  bool placeOpen = true, pitOpen = true;
+  late bool placeOpen = !widget.store.locked, pitOpen = !widget.store.locked;
   final Map<String, GlobalKey> keys = {};
   String? lastDate;
 
@@ -310,6 +350,10 @@ class _CommandeTabState extends State<CommandeTab> {
         if (ctx != null) Scrollable.ensureVisible(ctx, duration: const Duration(milliseconds: 300), alignment: 0.15, curve: Curves.easeOut);
       });
     } else if (s.cur.allValidated) {
+      setState(() {
+        placeOpen = false;
+        pitOpen = false;
+      });
       Timer(const Duration(milliseconds: 250), () {
         if (mounted) snack(context, 'Tous les départements sont validés. Vous pouvez préparer les messages.');
       });
@@ -389,6 +433,10 @@ class _CommandeTabState extends State<CommandeTab> {
   Widget build(BuildContext context) {
     final s = widget.store;
     if (lastDate != s.date) {
+      if (lastDate != null) {
+        placeOpen = !s.locked;
+        pitOpen = !s.locked;
+      }
       lastDate = s.date;
       openId = null;
     }
@@ -723,10 +771,28 @@ class _DishStepperState extends State<DishStepper> {
 // ===========================================================================
 // ENVOI
 // ===========================================================================
-class EnvoiTab extends StatelessWidget {
+class EnvoiPage extends StatelessWidget {
+  final Store store;
+  const EnvoiPage({super.key, required this.store});
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+        listenable: store,
+        builder: (context, _) => Scaffold(
+          appBar: AppBar(
+            title: const Text('Envoi de la commande', style: TextStyle(fontWeight: FontWeight.w800)),
+            shape: const Border(bottom: BorderSide(color: K.red, width: 3)),
+          ),
+          body: EnvoiBody(store: store, onEdit: () => Navigator.of(context).pop('edit'), onDone: () => Navigator.of(context).pop('done')),
+        ),
+      );
+}
+
+class EnvoiBody extends StatelessWidget {
   final Store store;
   final VoidCallback onEdit;
-  const EnvoiTab({super.key, required this.store, required this.onEdit});
+  final VoidCallback onDone;
+  const EnvoiBody({super.key, required this.store, required this.onEdit, required this.onDone});
 
   Future<void> openWa(BuildContext context, String phone, String text) async {
     store.flush();
@@ -868,6 +934,7 @@ class EnvoiTab extends StatelessWidget {
                   store.confirmSent();
                   Fx.success();
                   snack(context, 'Commande confirmée et verrouillée.');
+                  onDone();
                 },
           icon: const Icon(Icons.check_circle),
           label: const Text("J'ai envoyé la commande"),
@@ -921,6 +988,8 @@ class _HistoriqueTabState extends State<HistoriqueTab> {
             Expanded(
                 child: Text(t == null ? '—' : 'Jour ${t.day} (${t.place} + ${t.pit})  ·  Nuit ${t.night}',
                     style: TextStyle(color: o == null ? K.muted : K.ink, fontSize: 13))),
+            if (o != null && o.isSent && o.author.isNotEmpty)
+              Padding(padding: const EdgeInsets.only(right: 8), child: Avatar(profile: s.profileOf(o.authorUid), fallbackName: o.author, size: 26)),
             if (t != null) Padding(padding: const EdgeInsets.only(right: 8), child: Text('${t.total}', style: const TextStyle(fontWeight: FontWeight.w900))),
             statusPill(o),
           ]),
@@ -1203,6 +1272,85 @@ class _ReglagesTabState extends State<ReglagesTab> {
     }
   }
 
+  Future<void> editName() async {
+    final c = TextEditingController(text: widget.store.profile.name);
+    final v = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Nom et prénom'),
+        content: TextField(
+            controller: c,
+            autofocus: true,
+            textCapitalization: TextCapitalization.words,
+            decoration: const InputDecoration(helperText: 'Apparaît dans « Commande faite par »')),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Annuler')),
+          FilledButton(style: FilledButton.styleFrom(minimumSize: const Size(0, 44)), onPressed: () => Navigator.pop(ctx, c.text.trim()), child: const Text('Enregistrer')),
+        ],
+      ),
+    );
+    if (v == null || v == widget.store.profile.name) return;
+    if (v.length < 3) {
+      Fx.error();
+      if (mounted) snack(context, 'Saisissez votre nom et prénom.');
+      return;
+    }
+    try {
+      await widget.store.updateMyName(v).timeout(const Duration(seconds: 20));
+      Fx.ok();
+      if (mounted) snack(context, 'Nom modifié.');
+    } on TimeoutException {
+      if (mounted) snack(context, 'Modification gardée sur le téléphone ; envoyée dès que le réseau revient.');
+    } catch (e) {
+      Fx.error();
+      if (mounted) snack(context, 'Modification impossible : $e');
+    }
+  }
+
+  Future<void> changePhoto() async {
+    final hasPhoto = widget.store.me.photoBytes != null;
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (ctx) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          ListTile(leading: const Icon(Icons.photo_camera, color: K.red), title: const Text('Prendre une photo'), onTap: () => Navigator.pop(ctx, 'camera')),
+          ListTile(leading: const Icon(Icons.photo_library, color: K.red), title: const Text('Choisir dans la galerie'), onTap: () => Navigator.pop(ctx, 'gallery')),
+          if (hasPhoto) ListTile(leading: const Icon(Icons.delete_outline, color: K.muted), title: const Text('Retirer la photo'), onTap: () => Navigator.pop(ctx, 'remove')),
+        ]),
+      ),
+    );
+    if (choice == null) return;
+    try {
+      if (choice == 'remove') {
+        await widget.store.updateMyPhoto(null).timeout(const Duration(seconds: 20));
+      } else {
+        final x = await ImagePicker().pickImage(
+          source: choice == 'camera' ? ImageSource.camera : ImageSource.gallery,
+          preferredCameraDevice: CameraDevice.front,
+          maxWidth: 320,
+          maxHeight: 320,
+          imageQuality: 70,
+        );
+        if (x == null) return;
+        final bytes = await x.readAsBytes();
+        if (bytes.length > 140000) {
+          Fx.error();
+          if (mounted) snack(context, 'Photo trop lourde. Essayez une autre photo.');
+          return;
+        }
+        await widget.store.updateMyPhoto(bytes).timeout(const Duration(seconds: 20));
+      }
+      Fx.ok();
+      if (mounted) snack(context, choice == 'remove' ? 'Photo retirée.' : 'Photo de profil enregistrée.');
+    } on TimeoutException {
+      if (mounted) snack(context, 'Photo gardée sur le téléphone ; envoyée dès que le réseau revient.');
+    } catch (e) {
+      Fx.error();
+      if (mounted) snack(context, 'Photo impossible : $e');
+    }
+  }
+
   Widget title(String t) => Padding(padding: const EdgeInsets.only(bottom: 8), child: Text(t, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800)));
 
   @override
@@ -1216,15 +1364,43 @@ class _ReglagesTabState extends State<ReglagesTab> {
       const SizedBox(height: 10),
       SectionCard(
         child: Row(children: [
-          CircleAvatar(backgroundColor: K.redSoft, child: Text(p.name.isEmpty ? '?' : p.name[0].toUpperCase(), style: const TextStyle(color: K.red, fontWeight: FontWeight.w800))),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(p.name, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
-              Text('${p.email} · ${p.isAdmin ? 'Administrateur' : 'Agent RH'}', style: const TextStyle(color: K.muted, fontSize: 13)),
+          GestureDetector(
+            onTap: changePhoto,
+            child: Stack(children: [
+              Avatar(profile: s.me, fallbackName: p.name, size: 64),
+              Positioned(
+                right: 0,
+                bottom: 0,
+                child: Container(
+                  padding: const EdgeInsets.all(5),
+                  decoration: BoxDecoration(color: K.red, shape: BoxShape.circle, border: Border.all(color: Colors.white, width: 2)),
+                  child: const Icon(Icons.photo_camera, color: Colors.white, size: 14),
+                ),
+              ),
             ]),
           ),
-          TextButton(onPressed: () => FirebaseAuth.instance.signOut(), child: const Text('Déconnexion')),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(p.name, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 17)),
+              Text('${p.email} · ${p.isAdmin ? 'Administrateur' : 'Agent RH'}', style: const TextStyle(color: K.muted, fontSize: 13)),
+              const SizedBox(height: 4),
+              Wrap(spacing: 4, children: [
+                TextButton.icon(
+                  style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 6), visualDensity: VisualDensity.compact, foregroundColor: K.red),
+                  onPressed: editName,
+                  icon: const Icon(Icons.edit, size: 16),
+                  label: const Text('Modifier le nom'),
+                ),
+                TextButton.icon(
+                  style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 6), visualDensity: VisualDensity.compact, foregroundColor: K.muted),
+                  onPressed: () => FirebaseAuth.instance.signOut(),
+                  icon: const Icon(Icons.logout, size: 16),
+                  label: const Text('Déconnexion'),
+                ),
+              ]),
+            ]),
+          ),
         ]),
       ),
       const SizedBox(height: 12),
@@ -1344,7 +1520,7 @@ class _ReglagesTabState extends State<ReglagesTab> {
       const SizedBox(height: 24),
       const Center(child: Brand(size: 40, showCountry: false)),
       const SizedBox(height: 6),
-      const Center(child: Text('Repas Séguéla · version 1.1', style: TextStyle(color: K.muted, fontSize: 12))),
+      const Center(child: Text('Repas Séguéla · version 1.2', style: TextStyle(color: K.muted, fontSize: 12))),
     ]);
   }
 }
@@ -1440,6 +1616,271 @@ class _AdminSectionState extends State<AdminSection> {
               const Text('Désactivez un compte quand un agent quitte le service : il ne pourra plus rien voir.', style: TextStyle(color: K.muted, fontSize: 12)),
             ]);
           },
+        ),
+      ]),
+    );
+  }
+}
+
+// ===========================================================================
+// ACCUEIL
+// ===========================================================================
+class AccueilTab extends StatelessWidget {
+  final Store store;
+  final VoidCallback onOrder;
+  const AccueilTab({super.key, required this.store, required this.onOrder});
+
+  String greeting() {
+    final h = DateTime.now().hour;
+    return h < 12 ? 'Bonjour' : (h < 18 ? 'Bon après-midi' : 'Bonsoir');
+  }
+
+  String dayName(String iso) {
+    const days = ['lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', 'dimanche'];
+    final d = parseIso(iso);
+    return '${days[d.weekday - 1]} ${d.day} ${monthsFr[d.month - 1].toLowerCase()} ${d.year}';
+  }
+
+  /// Texte de la bande défilante : détails de la commande du jour sur une ligne.
+  String tickerText(Order? o) {
+    final t = todayIso();
+    if (o == null || (!o.isSent && o.totals.total == 0)) {
+      return 'COMMANDE DU ${dmy(t)} EN ATTENTE  •  Heure limite ${store.settings.deadline}  •  Ouvrez « Commande » pour la passer';
+    }
+    final x = o.totals;
+    String part(bool pit, bool night) => o.lines
+        .where((l) => l.isPit == pit)
+        .map((l) => MapEntry(l.name, night ? l.foodNight : l.foodDay))
+        .where((e) => e.value > 0)
+        .map((e) => '${e.key} ${e.value}')
+        .join(', ');
+    final head = o.isSent ? 'COMMANDE DU ${dmy(o.date)}' : 'COMMANDE DU ${dmy(o.date)} (EN COURS · ${o.validatedCount}/${o.lines.length} validés)';
+    final pl = part(false, false), pi = part(true, false), np = part(false, true), ni = part(true, true);
+    return '$head  •  SUR PLACE ${x.place}${pl.isEmpty ? '' : ' ($pl)'}  •  BOLS PIT ${x.pit}${pi.isEmpty ? '' : ' ($pi)'}'
+        '  •  TOTAL JOUR ${x.day}  •  NUIT ${x.night}${(np + ni).isEmpty ? '' : ' (${[np, ni].where((e) => e.isNotEmpty).join(', ')})'}'
+        '${o.isSent ? '  •  Commande faite par ${o.author}${o.sentAt != null ? ' à ${hm(o.sentAt)}' : ''}' : ''}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = store;
+    final o = s.todayOrder;
+    final sent = o?.isSent ?? false;
+    final t = o?.totals;
+    final me = s.me;
+    final first = s.profile.name.trim().split(RegExp(r'\s+')).last;
+    // Résumé du mois
+    final month = todayIso().substring(0, 7);
+    final list = s.ordersOf(month);
+    final monthPlats = list.fold<int>(0, (a, x) => a + x.totals.total);
+
+    // Heure limite
+    final p = s.settings.deadline.split(':');
+    final now = DateTime.now();
+    final lim = DateTime(now.year, now.month, now.day, int.tryParse(p[0]) ?? 8, int.tryParse(p.length > 1 ? p[1] : '20') ?? 20);
+    final mins = (lim.difference(now).inSeconds / 60).round();
+    String dur(int x) => x >= 60 ? '${x ~/ 60} h ${two(x % 60)}' : '$x min';
+
+    return Column(children: [
+      // Bande défilante rouge
+      NewsTicker(text: tickerText(o)),
+      Expanded(
+        child: ListView(padding: const EdgeInsets.fromLTRB(16, 18, 16, 24), children: [
+          Row(children: [
+            Avatar(profile: me, fallbackName: s.profile.name, size: 58),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('${greeting()} $first', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
+                Text(dayName(todayIso()), style: const TextStyle(color: K.muted, fontSize: 14)),
+              ]),
+            ),
+          ]),
+          const SizedBox(height: 18),
+          // Carte d'état de la commande du jour
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 300),
+            padding: const EdgeInsets.fromLTRB(18, 20, 18, 18),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: sent ? const [Color(0xFF2F8A1F), Color(0xFF3A6B18)] : const [Color(0xFFE3191F), Color(0xFFA30E13)],
+              ),
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [BoxShadow(color: (sent ? K.green : K.red).withValues(alpha: .35), blurRadius: 16, offset: const Offset(0, 6))],
+            ),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              Icon(sent ? Icons.verified_rounded : Icons.pending_actions_rounded, color: Colors.white, size: 44),
+              const SizedBox(height: 8),
+              Text(sent ? 'COMMANDE DU JOUR\nEFFECTUÉE' : 'COMMANDE DU ${dmy(todayIso())}\nEN ATTENTE',
+                  textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontSize: 25, fontWeight: FontWeight.w900, height: 1.15, letterSpacing: .5)),
+              const SizedBox(height: 14),
+              if (sent && t != null) ...[
+                Row(children: [
+                  _BigTotal(label: 'TOTAL JOUR', value: t.day, sub: 'Sur place ${t.place} · Bols ${t.pit}'),
+                  Container(width: 1, height: 70, color: Colors.white30),
+                  _BigTotal(label: 'TOTAL NUIT', value: t.night, sub: 'Sur place ${t.nightPlace} · Pit ${t.nightPit}'),
+                ]),
+                const SizedBox(height: 14),
+                Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                  Avatar(profile: s.profileOf(o!.authorUid), fallbackName: o!.author, size: 28),
+                  const SizedBox(width: 8),
+                  Flexible(
+                      child: Text('Par ${o!.author}${o!.sentAt != null ? ' à ${hm(o!.sentAt)}' : ''}',
+                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600))),
+                ]),
+              ] else ...[
+                Container(
+                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                  decoration: BoxDecoration(color: Colors.white.withValues(alpha: .16), borderRadius: BorderRadius.circular(12)),
+                  child: Text(
+                    mins >= 0 ? 'Heure limite ${s.settings.deadline}  ·  reste ${dur(mins)}' : 'Heure limite ${s.settings.deadline} dépassée de ${dur(-mins)}',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 15),
+                  ),
+                ),
+                if (o != null && o.validatedCount > 0) ...[
+                  const SizedBox(height: 8),
+                  Text('${o.validatedCount} / ${o.lines.length} départements déjà validés',
+                      textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70, fontWeight: FontWeight.w600)),
+                ],
+                const SizedBox(height: 16),
+                FilledButton.icon(
+                  style: FilledButton.styleFrom(backgroundColor: Colors.white, foregroundColor: K.red, minimumSize: const Size.fromHeight(56)),
+                  onPressed: () {
+                    HapticFeedback.mediumImpact();
+                    onOrder();
+                  },
+                  icon: const Icon(Icons.restaurant_menu, size: 26),
+                  label: Text(o != null && o.validatedCount > 0 ? 'Continuer la commande' : 'Passer la commande', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
+                ),
+              ],
+            ]),
+          ),
+          if (sent) ...[
+            const SizedBox(height: 10),
+            TextButton.icon(
+              onPressed: onOrder,
+              icon: const Icon(Icons.visibility_outlined, color: K.muted),
+              label: const Text('Voir le détail de la commande', style: TextStyle(color: K.muted, fontWeight: FontWeight.w700)),
+            ),
+          ],
+          const SizedBox(height: 16),
+          // Résumé du mois
+          SectionCard(
+            child: Row(children: [
+              Container(
+                width: 46,
+                height: 46,
+                decoration: BoxDecoration(color: K.redSoft, borderRadius: BorderRadius.circular(12)),
+                child: const Icon(Icons.insights_rounded, color: K.red),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(monthLabelNice(month), style: const TextStyle(color: K.muted, fontWeight: FontWeight.w700, fontSize: 13)),
+                  Text('${fmt(monthPlats)} plats  ·  ${list.length} jour(s)', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 17)),
+                ]),
+              ),
+              Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                const Text('MONTANT', style: TextStyle(color: K.muted, fontWeight: FontWeight.w800, fontSize: 11)),
+                Text('${fmt(monthPlats * s.settings.price)} F', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 17, color: K.red)),
+              ]),
+            ]),
+          ),
+        ]),
+      ),
+    ]);
+  }
+}
+
+class _BigTotal extends StatelessWidget {
+  final String label, sub;
+  final int value;
+  const _BigTotal({required this.label, required this.value, required this.sub});
+  @override
+  Widget build(BuildContext context) => Expanded(
+        child: Column(children: [
+          Text(label, style: const TextStyle(color: Colors.white70, fontWeight: FontWeight.w800, fontSize: 12, letterSpacing: .8)),
+          Text(fmt(value), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 46, height: 1.05)),
+          Text(sub, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70, fontSize: 12)),
+        ]),
+      );
+}
+
+/// Bande d'information rouge qui défile (texte d'une seule ligne).
+class NewsTicker extends StatefulWidget {
+  final String text;
+  const NewsTicker({super.key, required this.text});
+  @override
+  State<NewsTicker> createState() => _NewsTickerState();
+}
+
+class _NewsTickerState extends State<NewsTicker> with SingleTickerProviderStateMixin {
+  late final AnimationController ctrl = AnimationController(vsync: this);
+  static const style = TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 15, letterSpacing: .3);
+  double textW = 0, boxW = 0;
+  String shown = '';
+
+  void setup(double w) {
+    if (w == boxW && shown == widget.text) return;
+    boxW = w;
+    shown = widget.text;
+    final tp = TextPainter(text: TextSpan(text: shown, style: style), textDirection: TextDirection.ltr, maxLines: 1)..layout();
+    textW = tp.width;
+    final dist = boxW + textW;
+    ctrl.duration = Duration(milliseconds: (dist / 55 * 1000).round()); // ~55 px/s : lisible
+    ctrl
+      ..reset()
+      ..repeat();
+  }
+
+  @override
+  void dispose() {
+    ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 38,
+      color: K.red,
+      child: Row(children: [
+        Container(
+          height: 38,
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          color: K.redDark,
+          alignment: Alignment.center,
+          child: const Row(children: [
+            Icon(Icons.campaign_rounded, color: Colors.white, size: 20),
+            SizedBox(width: 4),
+            Text('INFO', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 12, letterSpacing: 1)),
+          ]),
+        ),
+        Expanded(
+          child: LayoutBuilder(builder: (context, c) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) setup(c.maxWidth);
+            });
+            return ClipRect(
+              child: AnimatedBuilder(
+                animation: ctrl,
+                builder: (context, _) {
+                  final x = boxW - (boxW + textW) * ctrl.value;
+                  return Stack(clipBehavior: Clip.hardEdge, children: [
+                    Positioned(
+                      left: x,
+                      top: 0,
+                      bottom: 0,
+                      child: Center(child: Text(widget.text, maxLines: 1, softWrap: false, style: style)),
+                    ),
+                  ]);
+                },
+              ),
+            );
+          }),
         ),
       ]),
     );

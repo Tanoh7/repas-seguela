@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:cloud_firestore/cloud_firestore.dart' hide Order;
 import 'package:flutter/foundation.dart';
@@ -217,6 +218,21 @@ class AgentProfile {
       );
 }
 
+/// Profil public d'un agent (nom + photo), visible par tous les agents RH.
+class PublicProfile {
+  final String name;
+  final String? photo; // JPEG en base64 (petite taille)
+  PublicProfile(this.name, this.photo);
+  Uint8List? get photoBytes {
+    if (photo == null || photo!.isEmpty) return null;
+    try {
+      return base64Decode(photo!);
+    } catch (_) {
+      return null;
+    }
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Store : données partagées (Firestore) + commande en cours d'édition
 // ---------------------------------------------------------------------------
@@ -225,6 +241,8 @@ class Store extends ChangeNotifier {
   AgentProfile profile;
   AppSettings settings = AppSettings.defaults();
   Map<String, Order> orders = {};
+  Map<String, PublicProfile> profiles = {};
+  int closeSignal = 0; // incrémenté après l'envoi : referme la saisie
   bool loaded = false;
   bool pendingSync = false; // des modifications attendent le réseau
   String? error;
@@ -238,6 +256,18 @@ class Store extends ChangeNotifier {
 
   Store(this.profile) {
     cur = _newOrder(date);
+    _subs.add(db.collection('profiles').snapshots().listen((snap) {
+      final m = <String, PublicProfile>{};
+      for (final d in snap.docs) {
+        final x = d.data();
+        m[d.id] = PublicProfile('${x['name'] ?? ''}', x['photo'] as String?);
+      }
+      profiles = m;
+      if (!m.containsKey(profile.uid) && profile.name.isNotEmpty) {
+        db.doc('profiles/${profile.uid}').set({'name': profile.name, 'updatedAt': DateTime.now().toUtc().toIso8601String()}, SetOptions(merge: true)).catchError((_) {});
+      }
+      notifyListeners();
+    }, onError: (e) {}));
     _subs.add(db.doc('config/settings').snapshots().listen((s) {
       if (s.exists && s.data() != null) settings = AppSettings.fromMap(s.data()!);
       if (!orders.containsKey(date) && !dirty) _reload(force: true);
@@ -330,6 +360,32 @@ class Store extends ChangeNotifier {
     });
   }
 
+  PublicProfile? profileOf(String? uid) => uid == null ? null : profiles[uid];
+  PublicProfile get me => profiles[profile.uid] ?? PublicProfile(profile.name, null);
+
+  Future<void> updateMyName(String name) async {
+    await db.doc('users/${profile.uid}').update({'name': name});
+    await db.doc('profiles/${profile.uid}').set({'name': name, 'updatedAt': DateTime.now().toUtc().toIso8601String()}, SetOptions(merge: true));
+    if (!cur.isSent) {
+      cur.author = name;
+    }
+  }
+
+  Future<void> updateMyPhoto(Uint8List? jpeg) async {
+    await db.doc('profiles/${profile.uid}').set({
+      'name': profile.name,
+      'photo': jpeg == null ? '' : base64Encode(jpeg),
+      'updatedAt': DateTime.now().toUtc().toIso8601String(),
+    }, SetOptions(merge: true));
+  }
+
+  /// Commande du jour (celle en cours d'édition si c'est aujourd'hui).
+  Order? get todayOrder {
+    final t = todayIso();
+    if (date == t && (dirty || exists)) return cur;
+    return orders[t];
+  }
+
   void confirmSent() {
     cur.status = 'sent';
     cur.sentAt = DateTime.now().toUtc().toIso8601String();
@@ -338,6 +394,7 @@ class Store extends ChangeNotifier {
     cur.authorUid = profile.uid;
     dirty = true;
     flush();
+    closeSignal++;
     notifyListeners();
   }
 
@@ -355,6 +412,7 @@ class Store extends ChangeNotifier {
     dirty = true;
     flush();
     rev++;
+    closeSignal++;
     notifyListeners();
   }
 

@@ -45,12 +45,12 @@ jobs:
         run: flutter pub get
 
       - name: Compiler l'APK
-        run: flutter build apk --release
+        run: flutter build apk --release --build-number=${{ github.run_number }}
 
       - name: Nommer le fichier
         id: name
         run: |
-          V="1.0.${{ github.run_number }}"
+          V="$(sed -n 's/^version: \([0-9]*\.[0-9]*\).*/\1/p' pubspec.yaml).${{ github.run_number }}"
           cp build/app/outputs/flutter-apk/app-release.apk "RepasSeguela-v$V.apk"
           echo "version=$V" >> "$GITHUB_OUTPUT"
 
