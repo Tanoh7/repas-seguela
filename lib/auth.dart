@@ -235,7 +235,21 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
         b.set(db.doc('users/$uid'), profile);
         await b.commit().timeout(const Duration(seconds: 25));
       } else {
-        await db.doc('users/$uid').set(profile).timeout(const Duration(seconds: 25));
+        // Le code est vérifié par le serveur ; on tolère les majuscules/minuscules.
+        final variants = <String>{c, c.toUpperCase(), c.toLowerCase()}.toList();
+        FirebaseException? last;
+        var ok = false;
+        for (final v in variants) {
+          try {
+            await db.doc('users/$uid').set({...profile, 'siteCode': v}).timeout(const Duration(seconds: 25));
+            ok = true;
+            break;
+          } on FirebaseException catch (e) {
+            if (e.code != 'permission-denied') rethrow;
+            last = e;
+          }
+        }
+        if (!ok && last != null) throw last;
       }
     } on FirebaseException catch (e) {
       if (mounted) {

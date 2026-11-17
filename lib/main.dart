@@ -74,8 +74,11 @@ class _ProfileGateState extends State<ProfileGate> {
   @override
   void initState() {
     super.initState();
-    sub = FirebaseFirestore.instance.doc('users/${widget.user.uid}').snapshots().listen((s) {
+    // On attend la confirmation du serveur : un compte refusé (code d'accès
+    // incorrect) ne doit jamais ouvrir l'application.
+    sub = FirebaseFirestore.instance.doc('users/${widget.user.uid}').snapshots(includeMetadataChanges: true).listen((s) {
       if (!mounted) return;
+      if (s.metadata.hasPendingWrites) return; // création en cours de vérification
       setState(() {
         if (s.exists && s.data() != null) {
           profile = AgentProfile.fromMap(widget.user.uid, s.data()!);
@@ -86,9 +89,15 @@ class _ProfileGateState extends State<ProfileGate> {
             } else {
               store!.updateProfile(profile!);
             }
+          } else {
+            store?.dispose();
+            store = null;
           }
         } else if (!s.metadata.isFromCache) {
           missing = true;
+          profile = null;
+          store?.dispose();
+          store = null;
         }
       });
     }, onError: (e) {

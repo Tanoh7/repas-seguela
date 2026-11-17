@@ -1520,7 +1520,7 @@ class _ReglagesTabState extends State<ReglagesTab> {
       const SizedBox(height: 24),
       const Center(child: Brand(size: 40, showCountry: false)),
       const SizedBox(height: 6),
-      const Center(child: Text('Repas Séguéla · version 1.2', style: TextStyle(color: K.muted, fontSize: 12))),
+      const Center(child: Text('Repas Séguéla · version 1.3', style: TextStyle(color: K.muted, fontSize: 12))),
     ]);
   }
 }

@@ -355,7 +355,10 @@ class Store extends ChangeNotifier {
     o.createdAt ??= DateTime.now().toUtc().toIso8601String();
     o.author = o.author.isEmpty ? profile.name : o.author;
     db.collection('orders').doc(o.date).set(o.toMap()).catchError((e) {
-      error = "Enregistrement refusé : votre compte n'a peut-être plus accès.";
+      final code = e is FirebaseException ? e.code : '$e';
+      error = code == 'permission-denied'
+          ? "Enregistrement refusé : votre compte n'est pas reconnu. Déconnectez-vous (Réglages) puis reconnectez-vous et saisissez le code d'accès du site."
+          : 'Enregistrement échoué ($code).';
       notifyListeners();
     });
   }

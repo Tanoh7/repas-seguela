@@ -1,7 +1,7 @@
 name: repas_seguela
 description: "Commande journalière des repas — DESIMONE CI, site de Séguéla"
 publish_to: 'none'
-version: 1.2.0+3
+version: 1.3.0+4
 
 environment:
   sdk: ">=3.5.0 <4.0.0"
